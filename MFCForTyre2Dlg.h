@@ -8,7 +8,7 @@
 #undef max 
 
 #define PI 3.1415926535
-#define ACCURACY 10e-3
+#define ACCURACY 10e-6
 
 #include <string.h>
 #include <pcl/io/io.h>
@@ -36,6 +36,7 @@ struct NormalEstStruct
 	size_t NormalIndices;
 	double SearchTime;
 	Vector3d ProjectNormal;
+	double IntSectAngle;//Intersection Angle
 };
 
 class NormalEstObj
@@ -52,8 +53,9 @@ public:
 	//Set values and output into files
 	void AddNEObject(double r, size_t thds, size_t fld, double et, size_t ni, double st, Vector3d v3);
 	void AddNEObject(NormalEstStruct &nes);
-
 	int WriteInFile(string fpath);
+
+	void ComputeIntSectAngle();
 
 };
 

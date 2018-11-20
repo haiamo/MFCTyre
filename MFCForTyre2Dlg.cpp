@@ -366,6 +366,10 @@ void CMFCForTyre2Dlg::OnBnClickedNormalest()
 		cand_len = cand_normals.size();
 		newNorm = TRUE;
 		curNormal = Vector3d(cloud_normals->points[ii].normal_x, cloud_normals->points[ii].normal_y, cloud_normals->points[ii].normal_z);
+		if (curNormal.norm() < ACCURACY || _isnan(curNormal[0]) || _isnan(curNormal[1]) || _isnan(curNormal[2]))
+		{
+			continue;
+		}
 		if (cand_len == 0)
 		{
 			cand_normals.push_back(curNormal);
@@ -376,7 +380,7 @@ void CMFCForTyre2Dlg::OnBnClickedNormalest()
 			for (size_t jj = 0; jj < cand_len; ++jj)
 			{
 				cur_mainNorm = cand_normals[jj];
-				angle1 = acos((curNormal[0] * cur_mainNorm[0] + curNormal[1] * cur_mainNorm[1] + curNormal[2] * cur_mainNorm[2]) / (curNormal.norm()*cur_mainNorm.norm()));
+				//angle1 = acos((curNormal[0] * cur_mainNorm[0] + curNormal[1] * cur_mainNorm[1] + curNormal[2] * cur_mainNorm[2]) / (curNormal.norm()*cur_mainNorm.norm()));
 				angle = acos(curNormal.dot(cur_mainNorm) / (curNormal.norm()*cur_mainNorm.norm()));
 				if ( angle - PI / 180 * 5<ACCURACY || angle - PI/180*175>ACCURACY)
 				{
@@ -392,18 +396,26 @@ void CMFCForTyre2Dlg::OnBnClickedNormalest()
 			}
 		}
 	}
-	
-	vector<int>::iterator maxIndex = max_element(begin(cand_normal_len), end(cand_normal_len));
-	Vector3d prjNormal = cand_normals[maxIndex-cand_normal_len.begin()];
 	QueryPerformanceCounter(&nend);
-	double pnspread = 0.0;
-	cs_info = cs_info + "\r\n" + GetTimeSpreadCString("Project normal searching successfully ", nfreq, nst, nend, pnspread);
-	cs_info = cs_info + "\r\n" + "Project normal is (" + to_string(prjNormal[0]).c_str()+", "+ to_string(prjNormal[1]).c_str()+", "+ to_string(prjNormal[2]).c_str() + ").";
-	cs_info = cs_info + "\r\n" + "With " + to_string(*maxIndex).c_str() + " normals in 5 degree.";
-	m_stc_normalest.SetWindowTextA(cs_info);
 
+	if (cand_normals.size() != 0)
+	{
+		vector<int>::iterator maxIndex = max_element(begin(cand_normal_len), end(cand_normal_len));
+		Vector3d prjNormal = cand_normals[maxIndex-cand_normal_len.begin()];
+	
+		double pnspread = 0.0;
+		cs_info = cs_info + "\r\n" + GetTimeSpreadCString("Project normal searching successfully ", nfreq, nst, nend, pnspread);
+		cs_info = cs_info + "\r\n" + "Project normal is (" + to_string(prjNormal[0]).c_str()+", "+ to_string(prjNormal[1]).c_str()+", "+ to_string(prjNormal[2]).c_str() + ").";
+		cs_info = cs_info + "\r\n" + "With " + to_string(*maxIndex).c_str() + " normals in 5 degree.";
+		m_neObjList.AddNEObject(radius, thdnum, indfolder, nespread, indices.size(), pnspread, prjNormal);
+	}
+	else
+	{
+		cs_info = cs_info + "\r\n" + "Failed to get the project normal, please check data!";
+	}
+	m_stc_normalest.SetWindowTextA(cs_info);
 	EnableWindows(TRUE);
-	m_neObjList.AddNEObject(radius, thdnum, indfolder, nespread, indices.size(), pnspread, prjNormal);
+	
 	/*
 	CRect rect;
 	CSize size(0, 0);
@@ -484,6 +496,7 @@ NormalEstObj::NormalEstObj(double r, size_t thds, size_t fld)
 	nsstr.ProjectNormal = Vector3d(1.0, 0.0, 0.0);
 	nsstr.Threads = thds;
 	nsstr.Folder = fld;
+	nsstr.IntSectAngle = 0.0;
 	neObj.push_back(nsstr);
 }
 
@@ -502,6 +515,7 @@ void NormalEstObj::AddNEObject(double r, size_t thds, size_t fld, double et, siz
 	tmpstr.NormalIndices = ni;
 	tmpstr.SearchTime = st;
 	tmpstr.ProjectNormal = v3;
+	tmpstr.IntSectAngle = 0.0;
 	neObj.push_back(tmpstr);
 }
 
@@ -518,15 +532,30 @@ int NormalEstObj::WriteInFile(string fpath)
 	{
 		return -1;//Open file failed.
 	}
+	ComputeIntSectAngle();
 	vector<NormalEstStruct>::iterator neit;
-	fs << "Radius" << "\t" << "Thread" << "\t" << "Folder" << "\t" << "EstTime" << "\t" << "NormalIndices" << "\t" << "SearchTime" << "\t" << "ProjectNormal" << endl;
+	fs << "Radius" << "\t" << "Thread" << "\t" << "Folder" << "\t" << "EstTime" << "\t";
+	fs << "NormalIndices" << "\t" << "SearchTime" << "\t" << "ProjectNormal" << "\t" << "Intersection Angle" << endl;
 	for (neit = neObj.begin(); neit != neObj.end(); ++neit)
 	{
 		fs << neit->Radius << "\t" << neit->Threads << "\t" << neit->Folder << "\t" << neit->EstTime << "\t";
-		fs << neit->NormalIndices << "\t" << neit->SearchTime << "\t (" << neit->ProjectNormal.transpose()<<")" << endl;
+		fs << neit->NormalIndices << "\t" << neit->SearchTime << "\t (" << neit->ProjectNormal.transpose() << ")" << "\t" << neit->IntSectAngle << endl;
 	}
 	fs.close();
 	return 0;
+}
+
+void NormalEstObj::ComputeIntSectAngle()
+{
+	vector<NormalEstStruct>::iterator tmp_it;
+	for (auto tmp_it = neObj.begin() + 1; tmp_it != neObj.end(); ++tmp_it)
+	{
+		if (tmp_it->ProjectNormal.norm() < ACCURACY)
+		{
+			continue;
+		}
+		tmp_it->IntSectAngle = acos((tmp_it-1)->ProjectNormal.dot(tmp_it->ProjectNormal.transpose())/((tmp_it - 1)->ProjectNormal.norm()*tmp_it->ProjectNormal.norm()));
+	}
 }
 
 
