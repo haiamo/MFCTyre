@@ -16,6 +16,7 @@
 #include <pcl/io/ply_io.h>
 #include <pcl/features/integral_image_normal.h>
 #include <pcl/visualization/cloud_viewer.h>
+#include <pcl\visualization\pcl_visualizer.h>
 #include <pcl/point_types.h>
 #include <pcl/features/normal_3d.h>
 #include <pcl/features/normal_3d_omp.h>
@@ -48,6 +49,7 @@ public:
 	//Constructors and destructors;
 	NormalEstObj();
 	NormalEstObj(double r, size_t thds, size_t fld);
+	NormalEstObj(NormalEstStruct &nes);
 	~NormalEstObj();
 
 	//Set values and output into files
@@ -56,6 +58,7 @@ public:
 	int WriteInFile(string fpath);
 
 	void ComputeIntSectAngle();
+	BOOL GetProjectNormal(Vector3d** normVec);
 
 };
 
@@ -88,6 +91,7 @@ protected:
 	CButton m_btn_loaddata;
 	CButton m_btn_normalest;
 	CButton m_btn_saveneresult;
+	CButton m_btn_projecttoplane;
 
 	//Static
 	CStatic m_stc_openfile;
@@ -96,6 +100,7 @@ protected:
 	CStatic m_stc_normalest;
 	CStatic m_stc_ne_threadnum;
 	CStatic m_stc_ne_indexfolder;
+	CStatic m_stc_projecttoplane;
 
 	//Edit
 	CEdit m_edt_ne_radius;
@@ -129,5 +134,6 @@ public:
 	double GetValueFromCString(CEdit* inEdit);
 //	afx_msg void OnEnChangeNeRadius();
 	afx_msg void OnBnClickedSaveneresult();
+	afx_msg void OnBnClickedProjecttoplane();
 };
 

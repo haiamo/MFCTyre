@@ -63,6 +63,7 @@ void CMFCForTyre2Dlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, BTN_LoadData, m_btn_loaddata);
 	DDX_Control(pDX, BTN_NormalEst, m_btn_normalest);
 	DDX_Control(pDX, BTN_SaveNEResult, m_btn_saveneresult);
+	DDX_Control(pDX, BTN_ProjectToPlane, m_btn_projecttoplane);
 
 	DDX_Control(pDX, STC_OpenFile, m_stc_openfile);
 	DDX_Control(pDX, STC_LoadData, m_stc_loaddata);
@@ -70,6 +71,7 @@ void CMFCForTyre2Dlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, STC_NE_Radius, m_stc_ne_radius);
 	DDX_Control(pDX, STC_NE_ThreadNum, m_stc_ne_threadnum);
 	DDX_Control(pDX, STC_NE_IndexFolder, m_stc_ne_indexfolder);
+	DDX_Control(pDX, STC_ProjectToPlane, m_stc_projecttoplane);
 
 	DDX_Control(pDX, EDT_NE_Radius, m_edt_ne_radius);
 	DDX_Control(pDX, EDT_NE_ThreadNum, m_edt_ne_threadnum);
@@ -86,6 +88,7 @@ BEGIN_MESSAGE_MAP(CMFCForTyre2Dlg, CDialogEx)
 	ON_BN_CLICKED(BTN_NormalEst, &CMFCForTyre2Dlg::OnBnClickedNormalest)
 //	ON_EN_CHANGE(EDT_NE_Radius, &CMFCForTyre2Dlg::OnEnChangeNeRadius)
 ON_BN_CLICKED(BTN_SaveNEResult, &CMFCForTyre2Dlg::OnBnClickedSaveneresult)
+ON_BN_CLICKED(BTN_ProjectToPlane, &CMFCForTyre2Dlg::OnBnClickedProjecttoplane)
 END_MESSAGE_MAP()
 
 
@@ -233,6 +236,7 @@ BOOL CMFCForTyre2Dlg::EnableWindows(BOOL bEnable)
 	m_btn_normalest.EnableWindow(bEnable);
 	m_btn_openfile.EnableWindow(bEnable);
 	m_btn_saveneresult.EnableWindow(bEnable);
+	m_btn_projecttoplane.EnableWindow(bEnable);
 	return bEnable;
 }
 
@@ -295,12 +299,36 @@ void CMFCForTyre2Dlg::OnBnClickedLoaddata()
 		double spread = 0.0;
 		CString cs_info = GetTimeSpreadCString("Loading successfully", nfreq, nst, nend, spread);
 		cs_info = cs_info + "\r\n " + "Cloud has " + to_string(cloud->points.size()).c_str() + " pionts.";
+		m_stc_loaddata.SetWindowTextA(cs_info+"\r\n"+"Computing minmum distance, please wait...");
 		QueryPerformanceCounter(&nst);
 		SetCloudPtr(cloud);
 		QueryPerformanceCounter(&nend);
 		cs_info = cs_info +"\r\n"+ GetTimeSpreadCString("Compute minmum distance successfully", nfreq, nst, nend, spread);
 		cs_info = cs_info + "\r\n" + "Minmum distance in cloud is " + to_string(GetCloudMinDist()).c_str()+".";
 		m_stc_loaddata.SetWindowTextA(cs_info);
+
+		/*
+		Show original and projected cloud points.
+		boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer(new pcl::visualization::PCLVisualizer("MyPointCloud"));
+		viewer->setBackgroundColor(0, 0, 0);
+		viewer->addPointCloud(cloud, "Original one");
+		viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "Original one");
+		viewer->addCoordinateSystem(1.0);
+		viewer->initCameraParameters();
+		
+		viewer->setBackgroundColor(150, 150, 150);
+		viewer->addPointCloud(prjcld, "Project one");
+		viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "sample cloud");
+		viewer->addCoordinateSystem(1.0);
+		viewer->initCameraParameters();
+		
+
+
+		while (!viewer->wasStopped())
+		{
+			viewer->spinOnce(100);
+			boost::this_thread::sleep(boost::posix_time::microseconds(100000));
+		}*/
 	}
 }
 
@@ -500,6 +528,11 @@ NormalEstObj::NormalEstObj(double r, size_t thds, size_t fld)
 	neObj.push_back(nsstr);
 }
 
+NormalEstObj::NormalEstObj(NormalEstStruct & nes)
+{
+	neObj.push_back(nes);
+}
+
 NormalEstObj::~NormalEstObj()
 {
 	neObj.clear();
@@ -558,6 +591,18 @@ void NormalEstObj::ComputeIntSectAngle()
 	}
 }
 
+BOOL NormalEstObj::GetProjectNormal(Vector3d** normVec)
+{
+	*normVec = &neObj.back().ProjectNormal;
+	if (NULL !=normVec)
+	{
+		return TRUE;
+	}
+	else
+	{
+		return FALSE;
+	}
+}
 
 void CMFCForTyre2Dlg::OnBnClickedSaveneresult()
 {
@@ -566,4 +611,86 @@ void CMFCForTyre2Dlg::OnBnClickedSaveneresult()
 	{
 		MessageBox("Write file failed.", "Write Warning", MB_OK | MB_ICONERROR);
 	}
+}
+
+
+void CMFCForTyre2Dlg::OnBnClickedProjecttoplane()
+{
+	/*
+	Projection Algrithm:
+		The normal of project plane is N(nx,ny,nz);
+		The origin point on the plane is O(x0,y0,z0);
+		The point of cloud is P(curx,cury,curz);
+		Our goal is to compute the projection point Q of P along the normal N onto the plane.
+	*/
+	Vector3d* prjNormal=::new Vector3d(0.0,0.0,0.0);
+	if (m_neObjList.GetProjectNormal(&prjNormal))
+	{
+		//Windows control
+		EnableWindows(FALSE);
+		LARGE_INTEGER nfreq, nst, nend;//Timer parameters.
+		QueryPerformanceFrequency(&nfreq);
+		m_stc_projecttoplane.SetWindowTextA("Projection calculating, please wait...");
+
+
+		//Computing data preparation
+		Vector3d pt_O(0.0,0.0,0.0);//Point on plane.
+		Vector3d pt_cur(0.0, 0.0, 0.0);
+		double t = 0.0;
+		double norm2 = prjNormal->norm();
+		PointCloud<PointXYZ>::Ptr cloud = this->GetCloudPtr();
+		PointCloud<PointXYZ>::Ptr prjcld(::new PointCloud<PointXYZ>);
+		PointXYZ tmpPT(0.0,0.0,0.0);
+		QueryPerformanceCounter(&nst);
+		for (size_t ii = 0; ii < cloud->points.size(); ++ii)
+		{
+			//The point in the cloud.
+			pt_cur = Vector3d(cloud->points[ii].x, cloud->points[ii].y, cloud->points[ii].z);
+
+			//Temporary parameter of t.
+			t = (prjNormal->dot(pt_O) - prjNormal->dot(pt_cur)) / norm2;
+
+			//The projection points on the plane.
+			tmpPT.x = pt_cur(0) + (*prjNormal)(0)*t;
+			tmpPT.y = pt_cur(1) + (*prjNormal)(1)*t;
+			tmpPT.z = pt_cur(2) + (*prjNormal)(2)*t;
+			prjcld->points.push_back(tmpPT);
+		}
+		QueryPerformanceCounter(&nend);
+
+		int fe = pcl::io::savePLYFile("test_prj.ply", *prjcld);
+
+		CString cs_info;
+		double prjspread;
+		cs_info = GetTimeSpreadCString("Projection successfully", nfreq, nst, nend, prjspread);
+		m_stc_projecttoplane.SetWindowTextA(cs_info);
+		EnableWindows(TRUE);
+		/*Show original and projected cloud points.
+		boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer(new pcl::visualization::PCLVisualizer("MyPointCloud"));
+		viewer->setBackgroundColor(0, 0, 0);
+		viewer->addPointCloud(cloud, "Original one");
+		viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 5, "Original one");
+		viewer->addCoordinateSystem(1.0);
+		viewer->initCameraParameters();
+		
+		viewer->setBackgroundColor(0, 0, 0);
+		viewer->addPointCloud(prjcld, "Project one");
+		viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "Project one");
+		viewer->addCoordinateSystem(1.0);
+		viewer->initCameraParameters();
+		
+
+		
+		while (!viewer->wasStopped())
+		{
+			viewer->spinOnce(100);
+			boost::this_thread::sleep(boost::posix_time::microseconds(1000));
+		}*/
+
+	}
+	else
+	{
+		m_stc_projecttoplane.SetWindowTextA("Failed to get the project normal!");
+	}
+
 }
