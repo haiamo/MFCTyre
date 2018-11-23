@@ -64,6 +64,10 @@ void CMFCForTyre2Dlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, BTN_NormalEst, m_btn_normalest);
 	DDX_Control(pDX, BTN_SaveNEResult, m_btn_saveneresult);
 	DDX_Control(pDX, BTN_ProjectToPlane, m_btn_projecttoplane);
+	DDX_Control(pDX, BTN_RunPCA, m_btn_runpca);
+	DDX_Control(pDX, RAD_PCAOrigin, m_rad_pcaorigin);
+	DDX_Control(pDX, RAD_PCAProjected, m_rad_pcaprojected);
+	DDX_Control(pDX, BTN_ConvertImg, m_btn_convertimg);
 
 	DDX_Control(pDX, STC_OpenFile, m_stc_openfile);
 	DDX_Control(pDX, STC_LoadData, m_stc_loaddata);
@@ -72,10 +76,13 @@ void CMFCForTyre2Dlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, STC_NE_ThreadNum, m_stc_ne_threadnum);
 	DDX_Control(pDX, STC_NE_IndexFolder, m_stc_ne_indexfolder);
 	DDX_Control(pDX, STC_ProjectToPlane, m_stc_projecttoplane);
+	DDX_Control(pDX, STC_RunPCA, m_stc_runpca);
+	DDX_Control(pDX, STC_ConvertImg, m_stc_convertimg);
 
 	DDX_Control(pDX, EDT_NE_Radius, m_edt_ne_radius);
 	DDX_Control(pDX, EDT_NE_ThreadNum, m_edt_ne_threadnum);
 	DDX_Control(pDX, EDT_NE_IndexFolder, m_edt_ne_indexfolder);
+	DDX_Control(pDX, EDT_NormalIndex, m_edt_normalindex);
 }
 
 BEGIN_MESSAGE_MAP(CMFCForTyre2Dlg, CDialogEx)
@@ -89,6 +96,8 @@ BEGIN_MESSAGE_MAP(CMFCForTyre2Dlg, CDialogEx)
 //	ON_EN_CHANGE(EDT_NE_Radius, &CMFCForTyre2Dlg::OnEnChangeNeRadius)
 ON_BN_CLICKED(BTN_SaveNEResult, &CMFCForTyre2Dlg::OnBnClickedSaveneresult)
 ON_BN_CLICKED(BTN_ProjectToPlane, &CMFCForTyre2Dlg::OnBnClickedProjecttoplane)
+ON_BN_CLICKED(BTN_RunPCA, &CMFCForTyre2Dlg::OnBnClickedRunpca)
+ON_BN_CLICKED(BTN_ConvertImg, &CMFCForTyre2Dlg::OnBnClickedConvertimg)
 END_MESSAGE_MAP()
 
 
@@ -128,6 +137,10 @@ BOOL CMFCForTyre2Dlg::OnInitDialog()
 	m_edt_ne_radius.SetWindowTextA("0.1");
 	m_edt_ne_threadnum.SetWindowTextA("2");
 	m_edt_ne_indexfolder.SetWindowTextA("10");
+	//m_edt_normalindex.SetWindowTextA("0");
+
+	m_rad_pcaorigin.SetCheck(0);
+	m_rad_pcaprojected.SetCheck(1);
 
 	return TRUE;  // 除非将焦点设置到控件，否则返回 TRUE
 }
@@ -190,39 +203,71 @@ void CMFCForTyre2Dlg::OnBnClickedOk()
 	CDialogEx::OnOK();
 }
 
-PointCloud<PointXYZ>::Ptr CMFCForTyre2Dlg::GetCloudPtr()
+PointCloud<PointXYZ>::Ptr CMFCForTyre2Dlg::GetCloudPtr(CLOUDTYPE out_type)
 {
-	return m_cloud;
+	switch (out_type)
+	{
+	case ORIGIN:
+		return m_cloud;
+	case PROJECTED:
+		return m_prjcld;
+	case TRANSFORMED:
+		return m_transcld;
+	default:
+		PointCloud<PointXYZ>::Ptr tmp(::new PointCloud<PointXYZ>);
+		return tmp;
+	}
 }
 
-void CMFCForTyre2Dlg::SetCloudPtr(PointCloud<PointXYZ>::Ptr in_cloud)
+PointCloud<Normal>::Ptr CMFCForTyre2Dlg::GetNormalPtr()
 {
-	m_cloud = in_cloud;
+	return m_normal;
+}
 
-	//Compute the minmum distance between points in cloud.
+void CMFCForTyre2Dlg::SetCloudPtr(PointCloud<PointXYZ>::Ptr in_cloud,CLOUDTYPE in_type)
+{
 	double curdist = 0.0;
-	Vector3d v3row, v3col;
-	for (size_t ii = 1; ii < in_cloud->points.size(); ++ii)
+	Vector3d v3row, v3col;	
+	switch (in_type)
 	{
-		v3row = Vector3d(in_cloud->points[ii-1].x, in_cloud->points[ii-1].y, in_cloud->points[ii-1].z);
-		v3col = Vector3d(in_cloud->points[ii].x, in_cloud->points[ii].y, in_cloud->points[ii].z);
-		curdist = (v3row - v3col).norm();
-		if (m_mindist < ACCURACY)
+	case ORIGIN:
+		m_cloud = in_cloud;
+		//Compute the minmum distance between points in cloud.
+		for (size_t ii = 1; ii < in_cloud->points.size(); ++ii)
 		{
-			if (curdist > ACCURACY)
+			v3row = Vector3d(in_cloud->points[ii-1].x, in_cloud->points[ii-1].y, in_cloud->points[ii-1].z);
+			v3col = Vector3d(in_cloud->points[ii].x, in_cloud->points[ii].y, in_cloud->points[ii].z);
+			curdist = (v3row - v3col).norm();
+			if (m_mindist < ACCURACY)
+			{
+				if (curdist > ACCURACY)
+				{
+					m_mindist = curdist;
+				}
+				else
+				{
+					m_mindist = ACCURACY;
+				}
+			}
+			else if (curdist > ACCURACY && curdist < m_mindist)
 			{
 				m_mindist = curdist;
 			}
-			else
-			{
-				m_mindist = ACCURACY;
-			}
 		}
-		else if (curdist > ACCURACY && curdist < m_mindist)
-		{
-			m_mindist = curdist;
-		}
+		break;
+	case PROJECTED:
+		m_prjcld = in_cloud;
+		break;
+	case TRANSFORMED:
+		m_transcld = in_cloud;
+		break;
 	}
+
+}
+
+void CMFCForTyre2Dlg::SetNormalPtr(PointCloud<Normal>::Ptr in_cloud)
+{
+	m_normal = in_cloud;
 }
 
 float CMFCForTyre2Dlg::GetCloudMinDist()
@@ -237,6 +282,11 @@ BOOL CMFCForTyre2Dlg::EnableWindows(BOOL bEnable)
 	m_btn_openfile.EnableWindow(bEnable);
 	m_btn_saveneresult.EnableWindow(bEnable);
 	m_btn_projecttoplane.EnableWindow(bEnable);
+	m_btn_runpca.EnableWindow(bEnable);
+	m_rad_pcaorigin.EnableWindow(bEnable);
+	m_rad_pcaprojected.EnableWindow(bEnable);
+	m_btn_convertimg.EnableWindow(bEnable);
+	m_stc_convertimg.EnableWindow(bEnable);
 	return bEnable;
 }
 
@@ -301,7 +351,7 @@ void CMFCForTyre2Dlg::OnBnClickedLoaddata()
 		cs_info = cs_info + "\r\n " + "Cloud has " + to_string(cloud->points.size()).c_str() + " pionts.";
 		m_stc_loaddata.SetWindowTextA(cs_info+"\r\n"+"Computing minmum distance, please wait...");
 		QueryPerformanceCounter(&nst);
-		SetCloudPtr(cloud);
+		SetCloudPtr(cloud,CLOUDTYPE::ORIGIN);
 		QueryPerformanceCounter(&nend);
 		cs_info = cs_info +"\r\n"+ GetTimeSpreadCString("Compute minmum distance successfully", nfreq, nst, nend, spread);
 		cs_info = cs_info + "\r\n" + "Minmum distance in cloud is " + to_string(GetCloudMinDist()).c_str()+".";
@@ -341,7 +391,7 @@ void CMFCForTyre2Dlg::OnBnClickedNormalest()
 	pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>());//Create a null kdtree object.
 	pcl::PointCloud<pcl::Normal>::Ptr cloud_normals(::new pcl::PointCloud<pcl::Normal>);
 	LARGE_INTEGER nfreq, nst, nend;//Timer parameters.
-	PointCloud<PointXYZ>::Ptr cloud = this->GetCloudPtr();
+	PointCloud<PointXYZ>::Ptr cloud = this->GetCloudPtr(CLOUDTYPE::ORIGIN);
 
 	//Estimating normal by multiple threads
 	double thdnum = GetValueFromCString(&m_edt_ne_threadnum);
@@ -380,6 +430,7 @@ void CMFCForTyre2Dlg::OnBnClickedNormalest()
 	cs_info = cs_info + "\r\n" + "With " + to_string(indices.size()).c_str() + " indices.";
 	//cs_info = cs_info + "\r\n" + "Searching project normal, please wait...";
 	m_stc_normalest.SetWindowTextA(cs_info + "\r\n" + "Searching project normal, please wait...");
+	SetNormalPtr(cloud_normals);
 
 	//Find main normal for the next preojecting process.
 	Vector3d curNormal, cur_mainNorm;
@@ -638,7 +689,7 @@ void CMFCForTyre2Dlg::OnBnClickedProjecttoplane()
 		Vector3d pt_cur(0.0, 0.0, 0.0);
 		double t = 0.0;
 		double norm2 = prjNormal->norm();
-		PointCloud<PointXYZ>::Ptr cloud = this->GetCloudPtr();
+		PointCloud<PointXYZ>::Ptr cloud = this->GetCloudPtr(CLOUDTYPE::ORIGIN);
 		PointCloud<PointXYZ>::Ptr prjcld(::new PointCloud<PointXYZ>);
 		PointXYZ tmpPT(0.0,0.0,0.0);
 		QueryPerformanceCounter(&nst);
@@ -657,13 +708,19 @@ void CMFCForTyre2Dlg::OnBnClickedProjecttoplane()
 			prjcld->points.push_back(tmpPT);
 		}
 		QueryPerformanceCounter(&nend);
-
-		int fe = pcl::io::savePLYFile("test_prj.ply", *prjcld);
-
 		CString cs_info;
 		double prjspread;
 		cs_info = GetTimeSpreadCString("Projection successfully", nfreq, nst, nend, prjspread);
 		m_stc_projecttoplane.SetWindowTextA(cs_info);
+
+		CString cs_file;
+		m_stc_openfile.GetWindowTextA(cs_file);
+		SetCloudPtr(prjcld, PROJECTED);
+		if (-1 == SaveCloudInPLY(cs_file, PROJECTED))
+		{
+			cs_info = cs_info + "\r\n" + "Save point cloud file failed. Please Check!";
+			m_stc_projecttoplane.SetWindowTextA(cs_info);
+		}
 		EnableWindows(TRUE);
 		/*Show original and projected cloud points.
 		boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer(new pcl::visualization::PCLVisualizer("MyPointCloud"));
@@ -693,4 +750,245 @@ void CMFCForTyre2Dlg::OnBnClickedProjecttoplane()
 		m_stc_projecttoplane.SetWindowTextA("Failed to get the project normal!");
 	}
 
+}
+
+
+void CMFCForTyre2Dlg::OnBnClickedRunpca()
+{
+	LARGE_INTEGER nfreq, nst, nend;//Timer parameters.
+	CString cs_info;
+	QueryPerformanceFrequency(&nfreq);
+	PointCloud<PointXYZ>::Ptr cloud;
+	EnableWindows(FALSE);
+	CLOUDTYPE cdtype;
+	if (1 == m_rad_pcaorigin.GetCheck())
+	{
+		cloud = this->GetCloudPtr(CLOUDTYPE::ORIGIN);
+		cdtype = ORIGIN;
+	}
+	else if (1 == m_rad_pcaprojected.GetCheck())
+	{
+		cloud = this->GetCloudPtr(CLOUDTYPE::PROJECTED);
+		cdtype = PROJECTED;
+	}
+
+	//Calculate the eigen vectors by PCA.
+	QueryPerformanceCounter(&nst);
+	Vector4f pcaCentroid;
+	compute3DCentroid(*cloud, pcaCentroid);
+	Matrix3f covariance;
+	computeCovarianceMatrixNormalized(*cloud, pcaCentroid, covariance);
+
+	SelfAdjointEigenSolver<Matrix3f> eigen_solver(covariance, ComputeEigenvectors);
+	Matrix3f eigenVecotorsPCA = eigen_solver.eigenvectors();
+	Vector3f eigenValuesPCA = eigen_solver.eigenvalues();
+
+	Matrix4f transform(Eigen::Matrix4f::Identity());
+	transform.block<3, 3>(0, 0) = eigenVecotorsPCA.transpose();
+	transform.block<3,1>(0,3)= -1.0f * (transform.block<3, 3>(0, 0)) * (pcaCentroid.head<3>());
+	PointCloud<PointXYZ>::Ptr transformedCloud (::new PointCloud<PointXYZ>);
+	transformPointCloud(*cloud, *transformedCloud, transform);
+	QueryPerformanceCounter(&nend);
+
+	//Save transformed point cloud in file.
+	CString cs_file;
+	m_stc_openfile.GetWindowTextA(cs_file);
+	SetCloudPtr(transformedCloud, TRANSFORMED);
+	double prjspread;
+	cs_info = GetTimeSpreadCString("Transformated successfully", nfreq, nst, nend, prjspread);
+	m_stc_runpca.SetWindowTextA(cs_info);
+	if (-1 == SaveCloudInPLY(cs_file, TRANSFORMED, cdtype))
+	{
+		cs_info = cs_info + "\r\n" + "Save into .ply file failed, please check!";
+		m_stc_runpca.SetWindowTextA(cs_info);
+	}
+	else
+	{
+		cs_info = cs_info + "\r\n" + "Save transformed point cloud file successfully.";
+		CString vectorStr, tmpstr;
+		for (Eigen::Index ii = 0; ii < eigenVecotorsPCA.size(); ++ii)
+		{
+			if (ii % 3 == 2)
+			{
+				tmpstr.Format("%lf", eigenVecotorsPCA(ii));
+				vectorStr = vectorStr + tmpstr + "\r\n";
+			}
+			else
+			{
+				tmpstr.Format("%lf, ", eigenVecotorsPCA(ii));
+				vectorStr += tmpstr;
+			}
+		}
+		cs_info = cs_info + "\r\n" + "Eigen Vectors: " + "\r\n" + vectorStr;
+
+		vectorStr = "";
+		tmpstr = "";
+		for (Eigen::Index ii = 0; ii < eigenValuesPCA.size(); ++ii)
+		{
+			tmpstr.Format("%lf, ", eigenValuesPCA(ii));
+			vectorStr += tmpstr;
+		}
+		cs_info = cs_info + "\r\n" + "Eigen Values: " + "\r\n" + vectorStr;
+		m_stc_runpca.SetWindowTextA(cs_info);
+	}
+	EnableWindows(TRUE);
+}
+
+int CMFCForTyre2Dlg::SaveCloudInPLY(CString in_path, CLOUDTYPE in_type)
+{
+	return SaveCloudInPLY(in_path, in_type, ORIGIN);
+}
+
+int CMFCForTyre2Dlg::SaveCloudInPLY(CString in_path, CLOUDTYPE in_type, CLOUDTYPE ori_type)
+{
+	string path, fullname, fname, ftype, savepath;
+	size_t pathid = 0, ftypeid = 0;
+
+	path = in_path.GetBuffer();
+	pathid = path.find_last_of("\\");
+	fullname = path.substr(pathid + 1);
+	ftypeid = fullname.find_last_of(".");
+	fname = fullname.substr(0, ftypeid);
+	ftype = fullname.substr(ftypeid + 1);
+	savepath = path.substr(0, pathid + 1) + fname;// +"_prj." + ftype;
+
+	int fe;
+	switch (in_type)
+	{
+	case ORIGIN:
+		fe = pcl::io::savePLYFile(savepath + "_org." + ftype, *m_cloud);
+		break;
+	case PROJECTED:
+		fe = pcl::io::savePLYFile(savepath + "_prj." + ftype, *m_prjcld);
+		break;
+	case TRANSFORMED:
+		switch (ori_type)
+		{
+		case ORIGIN:
+			fe = pcl::io::savePLYFile(savepath + "_o_tra." + ftype, *m_transcld);
+			break;
+		case PROJECTED:
+			fe = pcl::io::savePLYFile(savepath + "_p_tra." + ftype, *m_transcld);
+			break;
+		}
+	}
+	return 0;
+}
+
+
+void CMFCForTyre2Dlg::OnBnClickedConvertimg()
+{
+	//Convert transformed cloud to gray image.
+	/*
+	There are two parts for convertation.
+	First:
+	For each pixle in gray image, it just counts the number of points in the square which
+	is defined by four corners: (pixle.x-delta/2,pixle.y+delta/2),(pixle.x+delta/2,pixle.y+delta/2)
+	(pixle.x-delta/2,pixle.y-delta/2),(pixle.x+delta/2,pixle.y-delta/2).
+	Those points are defined by transformedCloud.(x,y);
+
+	Second:
+	Converting the deepth of points, which is defined by transformedCloud.z, along the normal
+	vector into gray scale.
+
+	Combining these two parts of gray scale will be set as the value in pixels of (x,y), which are
+	different from the points in the cloud.
+	xmin,ymax-------------------------xmax,ymax
+	|                                 |
+	|                                 |
+	|                                 |
+	|                                 |
+	xmin,ymin-------------------------xmax,ymin
+	*/
+	//First step:
+	//Get Normal index and assign the binormal and tangent vector indices at the same time.
+	int normalId = GetValueFromCString(&m_edt_normalindex);
+	//int normalId = 0;
+	int xId = 0, yId = 1;
+	switch (normalId)
+	{
+	case 0:
+		xId = 1;
+		yId = 2;
+		break;
+	case 1:
+		xId = 0;
+		yId = 2;
+		break;
+	case 2:
+		xId = 0;
+		yId = 1;
+		break;
+	}
+
+	double xmin = 0, xmax = 0, ymin = 0, ymax = 0;
+	PointXYZ tmppt(0.0, 0.0, 0.0);
+	PointCloud<PointXYZ>::Ptr transformedCloud;
+	transformedCloud = GetCloudPtr(TRANSFORMED);
+	for (size_t ii = 0; ii < transformedCloud->points.size(); ++ii)
+	{
+		tmppt = transformedCloud->points[ii];
+		if (tmppt.data[xId] < xmin)
+		{
+			xmin = tmppt.data[xId];
+		}
+
+		if (tmppt.data[xId] > xmax)
+		{
+			xmax = tmppt.data[xId];
+		}
+
+		if (tmppt.data[yId] < ymin)
+		{
+			ymin = tmppt.data[yId];
+		}
+
+		if (tmppt.data[yId] > ymax)
+		{
+			ymax = tmppt.data[yId];
+		}
+	}
+
+	double delta = GetValueFromCString(&m_edt_ne_radius);
+	short rows = short(ceil((xmax - xmin) / delta)), cols = short(ceil((ymax - ymin) / delta));//Rows and columns of gray scale image.
+	Eigen::MatrixXi img_mat = MatrixXi::Zero(rows, cols);
+	size_t rowi = 0, coli = 0;
+	int maxV = 0;
+	for (size_t ii = 0; ii < transformedCloud->points.size(); ++ii)
+	{
+		tmppt = transformedCloud->points[ii];
+		rowi = size_t(floor((tmppt.data[xId] - xmin) / delta));
+		coli = size_t(floor((tmppt.data[yId] - ymin) / delta));
+		if (rowi >= rows)
+		{
+			rowi = rows;
+		}
+		if (coli >= cols)
+		{
+			coli = cols;
+		}
+		img_mat(rowi, coli) += 1;
+		if (img_mat(rowi, coli) > maxV)
+		{
+			maxV = img_mat(rowi, coli);
+		}
+	}
+	int curValue = 0;
+	Eigen::MatrixXi res_mat = MatrixXi::Zero(rows, cols);
+	cv::Mat cvMat(rows, cols, CV_8UC1);	
+	uchar* p;
+	for (size_t rowi = 0; rowi < rows; ++rowi)
+	{
+		p = cvMat.ptr<uchar>(rowi);
+		for (size_t coli = 0; coli < cols; ++coli)
+		{
+			curValue = img_mat(rowi, coli);
+			res_mat(rowi, coli) = size_t(floor(255 * curValue / maxV));
+			p[coli] = res_mat(rowi, coli);
+		}
+	}
+	
+	cv::imshow("test", cvMat);
+
+	//Second step
 }
