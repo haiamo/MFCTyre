@@ -60,7 +60,6 @@ void CMFCForTyre2Dlg::DoDataExchange(CDataExchange* pDX)
 {
 	CDialogEx::DoDataExchange(pDX);
 	DDX_Control(pDX, BTN_OpenFile, m_btn_openfile);
-	DDX_Control(pDX, BTN_LoadData, m_btn_loaddata);
 	DDX_Control(pDX, BTN_NormalEst, m_btn_normalest);
 	DDX_Control(pDX, BTN_SaveNEResult, m_btn_saveneresult);
 	DDX_Control(pDX, BTN_ProjectToPlane, m_btn_projecttoplane);
@@ -91,13 +90,12 @@ BEGIN_MESSAGE_MAP(CMFCForTyre2Dlg, CDialogEx)
 	ON_WM_QUERYDRAGICON()
 	ON_BN_CLICKED(IDOK, &CMFCForTyre2Dlg::OnBnClickedOk)
 	ON_BN_CLICKED(BTN_OpenFile, &CMFCForTyre2Dlg::OnBnClickedOpenfile)
-	ON_BN_CLICKED(BTN_LoadData, &CMFCForTyre2Dlg::OnBnClickedLoaddata)
 	ON_BN_CLICKED(BTN_NormalEst, &CMFCForTyre2Dlg::OnBnClickedNormalest)
 //	ON_EN_CHANGE(EDT_NE_Radius, &CMFCForTyre2Dlg::OnEnChangeNeRadius)
-ON_BN_CLICKED(BTN_SaveNEResult, &CMFCForTyre2Dlg::OnBnClickedSaveneresult)
-ON_BN_CLICKED(BTN_ProjectToPlane, &CMFCForTyre2Dlg::OnBnClickedProjecttoplane)
-ON_BN_CLICKED(BTN_RunPCA, &CMFCForTyre2Dlg::OnBnClickedRunpca)
-ON_BN_CLICKED(BTN_ConvertImg, &CMFCForTyre2Dlg::OnBnClickedConvertimg)
+	ON_BN_CLICKED(BTN_SaveNEResult, &CMFCForTyre2Dlg::OnBnClickedSaveneresult)
+	ON_BN_CLICKED(BTN_ProjectToPlane, &CMFCForTyre2Dlg::OnBnClickedProjecttoplane)
+	ON_BN_CLICKED(BTN_RunPCA, &CMFCForTyre2Dlg::OnBnClickedRunpca)
+	ON_BN_CLICKED(BTN_ConvertImg, &CMFCForTyre2Dlg::OnBnClickedConvertimg)
 END_MESSAGE_MAP()
 
 
@@ -277,7 +275,6 @@ float CMFCForTyre2Dlg::GetCloudMinDist()
 
 BOOL CMFCForTyre2Dlg::EnableWindows(BOOL bEnable)
 {
-	m_btn_loaddata.EnableWindow(bEnable);
 	m_btn_normalest.EnableWindow(bEnable);
 	m_btn_openfile.EnableWindow(bEnable);
 	m_btn_saveneresult.EnableWindow(bEnable);
@@ -300,12 +297,7 @@ void CMFCForTyre2Dlg::OnBnClickedOpenfile()
 		filepath = fileopendlg.GetPathName();
 		m_stc_openfile.SetWindowTextA(filepath);
 	}
-}
 
-
-void CMFCForTyre2Dlg::OnBnClickedLoaddata()
-{
-	// TODO: 在此添加控件通知处理程序代码
 	// Load point cloud file
 	LARGE_INTEGER nfreq, nst, nend;//Timer parameters.
 	PointCloud<PointXYZ>::Ptr cloud(::new PointCloud<PointXYZ>);//Create point cloud pointer.
@@ -399,15 +391,18 @@ void CMFCForTyre2Dlg::OnBnClickedNormalest()
 	ne.setInputCloud(cloud);
 
 	//Transfer kdtree object to normal estimation object.
+	tree->setInputCloud(cloud);
 	ne.setSearchMethod(tree);
 
-	// Set searching neighbor radius.
+	// Set searching neighbor radius or k-neighbors.
 	double radius = GetValueFromCString(&m_edt_ne_radius);
-	ne.setRadiusSearch(radius);
+	//ne.setRadiusSearch(radius);
+	double indfolder = GetValueFromCString(&m_edt_ne_indexfolder);
+	ne.setKSearch(int(floor(indfolder)));
 
 	//Set searching indices of cloud points
-	double indfolder = GetValueFromCString(&m_edt_ne_indexfolder);
-	vector<int> indices(floor(cloud->points.size() / int(indfolder)));
+	
+	vector<int> indices(cloud->points.size());
 	for (int ii = 0; ii<indices.size(); ++ii)
 	{
 		indices[ii] = ii * int(indfolder);
@@ -432,12 +427,25 @@ void CMFCForTyre2Dlg::OnBnClickedNormalest()
 	m_stc_normalest.SetWindowTextA(cs_info + "\r\n" + "Searching project normal, please wait...");
 	SetNormalPtr(cloud_normals);
 
+	//Compute principal curvatures.
+	
+	pcl::PrincipalCurvaturesEstimation<pcl::PointXYZ, pcl::Normal, pcl::PrincipalCurvatures> prncrv;
+	PointCloud<PrincipalCurvatures>::Ptr cloud_curvatures(::new PointCloud<PrincipalCurvatures>);
+	prncrv.setInputCloud(cloud);
+	prncrv.setInputNormals(cloud_normals);
+	prncrv.setSearchMethod(tree);
+	//prncrv.setRadiusSearch(radius);
+	prncrv.setKSearch(int(floor(indfolder)));
+	prncrv.compute(*cloud_curvatures);
+	
+
 	//Find main normal for the next preojecting process.
 	Vector3d curNormal, cur_mainNorm;
 	vector<Vector3d> cand_normals;
 	vector<int> cand_normal_len;
 	bool newNorm = TRUE;
 	double angle = 0.0, angle1 = 0.0;
+	double min_curv = 0.0, max_curv = 0.0, tmp_curv = 0.0;
 	size_t cand_len;
 	QueryPerformanceCounter(&nst);
 	for (size_t ii = 0; ii < cloud_normals->points.size(); ++ii)
@@ -445,6 +453,18 @@ void CMFCForTyre2Dlg::OnBnClickedNormalest()
 		cand_len = cand_normals.size();
 		newNorm = TRUE;
 		curNormal = Vector3d(cloud_normals->points[ii].normal_x, cloud_normals->points[ii].normal_y, cloud_normals->points[ii].normal_z);
+		tmp_curv = cloud_normals->points[ii].curvature;
+		if (tmp_curv > max_curv)
+		{
+			max_curv = tmp_curv;
+		}
+
+		if (tmp_curv < min_curv)
+		{
+			min_curv = tmp_curv;
+		}
+
+		tmp_curv = cloud_curvatures->points[ii].pc1;
 		if (curNormal.norm() < ACCURACY || _isnan(curNormal[0]) || _isnan(curNormal[1]) || _isnan(curNormal[2]))
 		{
 			continue;
@@ -486,6 +506,8 @@ void CMFCForTyre2Dlg::OnBnClickedNormalest()
 		cs_info = cs_info + "\r\n" + GetTimeSpreadCString("Project normal searching successfully ", nfreq, nst, nend, pnspread);
 		cs_info = cs_info + "\r\n" + "Project normal is (" + to_string(prjNormal[0]).c_str()+", "+ to_string(prjNormal[1]).c_str()+", "+ to_string(prjNormal[2]).c_str() + ").";
 		cs_info = cs_info + "\r\n" + "With " + to_string(*maxIndex).c_str() + " normals in 5 degree.";
+		cs_info = cs_info + "\r\n" + "Max curvature: " + to_string(max_curv).c_str();
+		cs_info = cs_info + "\r\n" + "Min curvature: " + to_string(min_curv).c_str();
 		m_neObjList.AddNEObject(radius, thdnum, indfolder, nespread, indices.size(), pnspread, prjNormal);
 	}
 	else

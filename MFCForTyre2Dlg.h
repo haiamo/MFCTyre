@@ -10,19 +10,25 @@
 #define PI 3.1415926535
 #define ACCURACY 10e-6
 
+//c++
 #include <string.h>
-#include <pcl/io/io.h>
-#include <pcl/io/pcd_io.h>
-#include <pcl/io/ply_io.h>
-#include <pcl/features/integral_image_normal.h>
-#include <pcl/visualization/cloud_viewer.h>
-#include <pcl\visualization\pcl_visualizer.h>
-#include <pcl/point_types.h>
-#include <pcl/features/normal_3d.h>
-#include <pcl/features/normal_3d_omp.h>
 #include <sstream>
 #include <fstream>
+
+//pcl
+#include <pcl\io\io.h>
+#include <pcl\io\pcd_io.h>
+#include <pcl\io\ply_io.h>
+#include <pcl\features\integral_image_normal.h>
+#include <pcl\visualization\cloud_viewer.h>
+#include <pcl\visualization\pcl_visualizer.h>
+#include <pcl\point_types.h>
+#include <pcl\features\normal_3d.h>
+#include <pcl\features\normal_3d_omp.h>
+#include <pcl\features\principal_curvatures.h>
 #include <pcl\common\transforms.h>
+
+//opencv 
 #include <opencv2\core\core.hpp>
 #include <opencv2\imgproc\imgproc.hpp>
 #include <opencv.hpp>
@@ -100,7 +106,6 @@ protected:
 	// members for DDX_control
 	//Button
 	CButton m_btn_openfile;
-	CButton m_btn_loaddata;
 	CButton m_btn_normalest;
 	CButton m_btn_saveneresult;
 	CButton m_btn_projecttoplane;
