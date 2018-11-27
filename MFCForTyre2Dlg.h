@@ -22,11 +22,13 @@
 #include <pcl\features\integral_image_normal.h>
 #include <pcl\visualization\cloud_viewer.h>
 #include <pcl\visualization\pcl_visualizer.h>
+#include <pcl\visualization\range_image_visualizer.h>
 #include <pcl\point_types.h>
 #include <pcl\features\normal_3d.h>
 #include <pcl\features\normal_3d_omp.h>
 #include <pcl\features\principal_curvatures.h>
 #include <pcl\common\transforms.h>
+#include <pcl\range_image\range_image.h>
 
 //opencv 
 #include <opencv2\core\core.hpp>
@@ -43,7 +45,8 @@ enum CLOUDTYPE
 {
 	ORIGIN,
 	PROJECTED,
-	TRANSFORMED
+	TRANSFORMED,
+	NORMALS
 };
 
 struct NormalEstStruct
@@ -125,11 +128,19 @@ protected:
 	CStatic m_stc_runpca;
 	CStatic m_stc_convertimg;
 
+
 	//Edit
 	CEdit m_edt_ne_radius;
 	CEdit m_edt_ne_threadnum;
 	CEdit m_edt_ne_indexfolder;
-	CEdit m_edt_normalindex;
+	CEdit m_edt_ci_normalindex;
+	CEdit m_edt_pa_normalindex;
+	CEdit m_edt_pa_senpos_x;
+	CEdit m_edt_pa_senpos_y;
+	CEdit m_edt_pa_senpos_z;
+	CEdit m_edt_pa_angres;
+	CEdit m_edt_pa_maxangwi;
+	CEdit m_edt_pa_maxanghi;
 
 
 	// 生成的消息映射函数
@@ -150,25 +161,32 @@ private:
 	float m_mindist;
 
 public:
+	//PCL member functions
 	PointCloud<PointXYZ>::Ptr GetCloudPtr(CLOUDTYPE out_type);
 	PointCloud<Normal>::Ptr GetNormalPtr();
+
 	void SetCloudPtr(PointCloud<PointXYZ>::Ptr in_cloud, CLOUDTYPE in_type);
 	void SetNormalPtr(PointCloud<Normal>::Ptr in_cloud);
+
 	float GetCloudMinDist();
-	BOOL EnableWindows(BOOL bEnable=TRUE);
-	afx_msg void OnBnClickedOpenfile();
-	afx_msg void OnBnClickedLoaddata();
-	afx_msg void OnBnClickedNormalest();
+
+	int SaveCloudInPLY(CString in_path, CLOUDTYPE in_type);
+	int SaveCloudInPLY(CString in_path, CLOUDTYPE in_type, CLOUDTYPE ori_type);	
 
 	CString GetTimeSpreadCString(string procstr, LARGE_INTEGER nfreq, LARGE_INTEGER nst, LARGE_INTEGER nend,double& tspread);
 	double GetValueFromCString(CEdit* inEdit);
-//	afx_msg void OnEnChangeNeRadius();
+
+	void ShowCurrentCloud(CLOUDTYPE show_type);
+
+	//Windows controls' action
+	BOOL EnableWindows(BOOL bEnable=TRUE);
+	afx_msg void OnBnClickedOpenfile();
+	afx_msg void OnBnClickedNormalest();
+	afx_msg void OnBnClickedConvertimg();
+	afx_msg void OnBnClickedPinsanalysis();
+	//	afx_msg void OnEnChangeNeRadius();
 	afx_msg void OnBnClickedSaveneresult();
 	afx_msg void OnBnClickedProjecttoplane();
 	afx_msg void OnBnClickedRunpca();
-
-	int SaveCloudInPLY(CString in_path, CLOUDTYPE in_type);
-	int SaveCloudInPLY(CString in_path, CLOUDTYPE in_type, CLOUDTYPE ori_type);
-	afx_msg void OnBnClickedConvertimg();
 };
 

@@ -81,7 +81,13 @@ void CMFCForTyre2Dlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, EDT_NE_Radius, m_edt_ne_radius);
 	DDX_Control(pDX, EDT_NE_ThreadNum, m_edt_ne_threadnum);
 	DDX_Control(pDX, EDT_NE_IndexFolder, m_edt_ne_indexfolder);
-	DDX_Control(pDX, EDT_NormalIndex, m_edt_normalindex);
+	DDX_Control(pDX, EDT_CI_NormalIndex, m_edt_ci_normalindex);
+	DDX_Control(pDX, EDT_PA_SenPos_X, m_edt_pa_senpos_x);
+	DDX_Control(pDX, EDT_PA_SenPos_Y, m_edt_pa_senpos_y);
+	DDX_Control(pDX, EDT_PA_SenPos_Z, m_edt_pa_senpos_z);
+	DDX_Control(pDX, EDT_PA_AngRes, m_edt_pa_angres);
+	DDX_Control(pDX, EDT_PA_MaxAngWi, m_edt_pa_maxangwi);
+	DDX_Control(pDX, EDT_PA_MaxAngHi, m_edt_pa_maxanghi);
 }
 
 BEGIN_MESSAGE_MAP(CMFCForTyre2Dlg, CDialogEx)
@@ -96,6 +102,7 @@ BEGIN_MESSAGE_MAP(CMFCForTyre2Dlg, CDialogEx)
 	ON_BN_CLICKED(BTN_ProjectToPlane, &CMFCForTyre2Dlg::OnBnClickedProjecttoplane)
 	ON_BN_CLICKED(BTN_RunPCA, &CMFCForTyre2Dlg::OnBnClickedRunpca)
 	ON_BN_CLICKED(BTN_ConvertImg, &CMFCForTyre2Dlg::OnBnClickedConvertimg)
+	ON_BN_CLICKED(BTN_PinsAnalysis, &CMFCForTyre2Dlg::OnBnClickedPinsanalysis)
 END_MESSAGE_MAP()
 
 
@@ -135,10 +142,18 @@ BOOL CMFCForTyre2Dlg::OnInitDialog()
 	m_edt_ne_radius.SetWindowTextA("0.1");
 	m_edt_ne_threadnum.SetWindowTextA("2");
 	m_edt_ne_indexfolder.SetWindowTextA("10");
-	//m_edt_normalindex.SetWindowTextA("0");
+	
+	m_edt_ci_normalindex.SetWindowTextA("0");
 
-	m_rad_pcaorigin.SetCheck(0);
-	m_rad_pcaprojected.SetCheck(1);
+	m_edt_pa_senpos_x.SetWindowTextA("0.0");
+	m_edt_pa_senpos_y.SetWindowTextA("0.0");
+	m_edt_pa_senpos_z.SetWindowTextA("0.0");
+	m_edt_pa_angres.SetWindowTextA("1.0");//Degree
+	m_edt_pa_maxangwi.SetWindowTextA("180.0");//Degree
+	m_edt_pa_maxanghi.SetWindowTextA("360.0");//Degree
+
+	m_rad_pcaorigin.SetCheck(1);
+	m_rad_pcaprojected.SetCheck(0);
 
 	return TRUE;  // 除非将焦点设置到控件，否则返回 TRUE
 }
@@ -391,18 +406,18 @@ void CMFCForTyre2Dlg::OnBnClickedNormalest()
 	ne.setInputCloud(cloud);
 
 	//Transfer kdtree object to normal estimation object.
-	tree->setInputCloud(cloud);
+	//tree->setInputCloud(cloud);
 	ne.setSearchMethod(tree);
 
 	// Set searching neighbor radius or k-neighbors.
 	double radius = GetValueFromCString(&m_edt_ne_radius);
-	//ne.setRadiusSearch(radius);
+	ne.setRadiusSearch(radius);
 	double indfolder = GetValueFromCString(&m_edt_ne_indexfolder);
-	ne.setKSearch(int(floor(indfolder)));
+	//ne.setKSearch(int(floor(indfolder)));
 
 	//Set searching indices of cloud points
 	
-	vector<int> indices(cloud->points.size());
+	vector<int> indices(floor(cloud->points.size() / int(indfolder)));
 	for (int ii = 0; ii<indices.size(); ++ii)
 	{
 		indices[ii] = ii * int(indfolder);
@@ -427,7 +442,7 @@ void CMFCForTyre2Dlg::OnBnClickedNormalest()
 	m_stc_normalest.SetWindowTextA(cs_info + "\r\n" + "Searching project normal, please wait...");
 	SetNormalPtr(cloud_normals);
 
-	//Compute principal curvatures.
+	/*Compute principal curvatures.
 	
 	pcl::PrincipalCurvaturesEstimation<pcl::PointXYZ, pcl::Normal, pcl::PrincipalCurvatures> prncrv;
 	PointCloud<PrincipalCurvatures>::Ptr cloud_curvatures(::new PointCloud<PrincipalCurvatures>);
@@ -437,7 +452,7 @@ void CMFCForTyre2Dlg::OnBnClickedNormalest()
 	//prncrv.setRadiusSearch(radius);
 	prncrv.setKSearch(int(floor(indfolder)));
 	prncrv.compute(*cloud_curvatures);
-	
+	*/ 
 
 	//Find main normal for the next preojecting process.
 	Vector3d curNormal, cur_mainNorm;
@@ -453,6 +468,7 @@ void CMFCForTyre2Dlg::OnBnClickedNormalest()
 		cand_len = cand_normals.size();
 		newNorm = TRUE;
 		curNormal = Vector3d(cloud_normals->points[ii].normal_x, cloud_normals->points[ii].normal_y, cloud_normals->points[ii].normal_z);
+		/*Curvature searching
 		tmp_curv = cloud_normals->points[ii].curvature;
 		if (tmp_curv > max_curv)
 		{
@@ -465,6 +481,7 @@ void CMFCForTyre2Dlg::OnBnClickedNormalest()
 		}
 
 		tmp_curv = cloud_curvatures->points[ii].pc1;
+		*/
 		if (curNormal.norm() < ACCURACY || _isnan(curNormal[0]) || _isnan(curNormal[1]) || _isnan(curNormal[2]))
 		{
 			continue;
@@ -560,6 +577,28 @@ double CMFCForTyre2Dlg::GetValueFromCString(CEdit* inEdit)
 	chstr = cstr.GetBuffer();
 	double val = atof(chstr);
 	return val;
+}
+
+void CMFCForTyre2Dlg::ShowCurrentCloud(CLOUDTYPE show_type)
+{
+	visualization::CloudViewer cld_vw("Current Cloud");
+	switch (show_type)
+	{
+	case ORIGIN:
+		cld_vw.showCloud(m_cloud);
+		break;
+	case PROJECTED:
+		cld_vw.showCloud(m_prjcld);
+		break;
+	case TRANSFORMED:
+		cld_vw.showCloud(m_transcld);
+		break;
+	case NORMALS:
+		//cld_vw.showCloud(m_normal);
+		break;
+	default:
+		break;
+	}
 }
 
 //void CMFCForTyre2Dlg::OnEnChangeNeRadius()
@@ -804,7 +843,7 @@ void CMFCForTyre2Dlg::OnBnClickedRunpca()
 	SelfAdjointEigenSolver<Matrix3f> eigen_solver(covariance, ComputeEigenvectors);
 	Matrix3f eigenVecotorsPCA = eigen_solver.eigenvectors();
 	Vector3f eigenValuesPCA = eigen_solver.eigenvalues();
-
+	/* Transformation and save file processes.
 	Matrix4f transform(Eigen::Matrix4f::Identity());
 	transform.block<3, 3>(0, 0) = eigenVecotorsPCA.transpose();
 	transform.block<3,1>(0,3)= -1.0f * (transform.block<3, 3>(0, 0)) * (pcaCentroid.head<3>());
@@ -827,32 +866,34 @@ void CMFCForTyre2Dlg::OnBnClickedRunpca()
 	else
 	{
 		cs_info = cs_info + "\r\n" + "Save transformed point cloud file successfully.";
-		CString vectorStr, tmpstr;
-		for (Eigen::Index ii = 0; ii < eigenVecotorsPCA.size(); ++ii)
-		{
-			if (ii % 3 == 2)
-			{
-				tmpstr.Format("%lf", eigenVecotorsPCA(ii));
-				vectorStr = vectorStr + tmpstr + "\r\n";
-			}
-			else
-			{
-				tmpstr.Format("%lf, ", eigenVecotorsPCA(ii));
-				vectorStr += tmpstr;
-			}
-		}
-		cs_info = cs_info + "\r\n" + "Eigen Vectors: " + "\r\n" + vectorStr;
+	}
+	*/
 
-		vectorStr = "";
-		tmpstr = "";
-		for (Eigen::Index ii = 0; ii < eigenValuesPCA.size(); ++ii)
+	CString vectorStr, tmpstr;
+	for (Eigen::Index ii = 0; ii < eigenVecotorsPCA.size(); ++ii)
+	{
+		if (ii % 3 == 2)
 		{
-			tmpstr.Format("%lf, ", eigenValuesPCA(ii));
+			tmpstr.Format("%lf", eigenVecotorsPCA(ii));
+			vectorStr = vectorStr + tmpstr + "\r\n";
+		}
+		else
+		{
+			tmpstr.Format("%lf, ", eigenVecotorsPCA(ii));
 			vectorStr += tmpstr;
 		}
-		cs_info = cs_info + "\r\n" + "Eigen Values: " + "\r\n" + vectorStr;
-		m_stc_runpca.SetWindowTextA(cs_info);
 	}
+	cs_info = cs_info + "\r\n" + "Eigen Vectors: " + "\r\n" + vectorStr;
+
+	vectorStr = "";
+	tmpstr = "";
+	for (Eigen::Index ii = 0; ii < eigenValuesPCA.size(); ++ii)
+	{
+		tmpstr.Format("%lf, ", eigenValuesPCA(ii));
+		vectorStr += tmpstr;
+	}
+	cs_info = cs_info + "\r\n" + "Eigen Values: " + "\r\n" + vectorStr;
+	m_stc_runpca.SetWindowTextA(cs_info);
 	EnableWindows(TRUE);
 }
 
@@ -924,7 +965,7 @@ void CMFCForTyre2Dlg::OnBnClickedConvertimg()
 	*/
 	//First step:
 	//Get Normal index and assign the binormal and tangent vector indices at the same time.
-	int normalId = GetValueFromCString(&m_edt_normalindex);
+	int normalId = GetValueFromCString(&m_edt_ci_normalindex);
 	//int normalId = 0;
 	int xId = 0, yId = 1;
 	switch (normalId)
@@ -1005,7 +1046,7 @@ void CMFCForTyre2Dlg::OnBnClickedConvertimg()
 		for (size_t coli = 0; coli < cols; ++coli)
 		{
 			curValue = img_mat(rowi, coli);
-			res_mat(rowi, coli) = size_t(floor(255 * curValue / maxV));
+			res_mat(rowi, coli) = int(floor(255 * curValue / maxV));
 			p[coli] = res_mat(rowi, coli);
 		}
 	}
@@ -1013,4 +1054,59 @@ void CMFCForTyre2Dlg::OnBnClickedConvertimg()
 	cv::imshow("test", cvMat);
 
 	//Second step
+}
+
+
+void CMFCForTyre2Dlg::OnBnClickedPinsanalysis()
+{
+	/*Pins Analysis has two steps:
+	First step: Searching pins positions by using 3d-tree.
+	Second step: Analyize the pins' propeties: 
+		1)hight from the tyre surface, 
+		2)the postion of pins(the position on pins' heads projecting points).
+	*/
+
+	//First step: Getting the range-image from point cloud by PCL.
+	PointCloud<PointXYZ>::Ptr cloud = GetCloudPtr(ORIGIN);
+	PointCloud<PointXYZ>& point_cloud = *cloud;
+	
+	float angularResolution = (float)deg2rad(GetValueFromCString(&m_edt_pa_angres));
+	float maxAngleWidth = (float)deg2rad(GetValueFromCString(&m_edt_pa_maxangwi));
+	float maxAngleHeight = (float)deg2rad(GetValueFromCString(&m_edt_pa_maxanghi));
+
+	Eigen::Affine3f sensorPose = (Eigen::Affine3f)Eigen::Translation3f((float)deg2rad(GetValueFromCString(&m_edt_pa_senpos_x)), (float)deg2rad(GetValueFromCString(&m_edt_pa_senpos_y)), (float)deg2rad(GetValueFromCString(&m_edt_pa_senpos_z)));
+	pcl::RangeImage::CoordinateFrame coordinate_frame = pcl::RangeImage::CAMERA_FRAME;
+	float noiseLevel = 0.00;
+	float minRange = 0.0f;
+	int borderSize = 1;
+	boost::shared_ptr<pcl::RangeImage> rangeImagePtr(::new pcl::RangeImage);
+	pcl::RangeImage& rangeImage=*rangeImagePtr;
+	rangeImage.createFromPointCloud(point_cloud, angularResolution, maxAngleWidth, maxAngleHeight, sensorPose, coordinate_frame, noiseLevel, minRange, borderSize);
+
+	//创建3D视图并且添加点云进行显示
+	/*pcl::visualization::PCLVisualizer viewer("3D Viewer");
+	viewer.setBackgroundColor(1, 1, 1);
+	pcl::visualization::PointCloudColorHandlerCustom<pcl::PointWithRange> range_image_color_handler(rangeImagePtr, 0, 0, 0);
+	viewer.addPointCloud(rangeImagePtr, range_image_color_handler, "range image");
+	viewer.setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "range image");
+	//viewer.addCoordinateSystem (1.0f);
+	//PointCloudColorHandlerCustom<PointType> point_cloud_color_handler (point_cloud_ptr, 150, 150, 150);
+	//viewer.addPointCloud (point_cloud_ptr, point_cloud_color_handler, "original point cloud");
+	viewer.initCameraParameters();
+	//setViewerPose(viewer, rangeImage.getTransformationToWorldSystem());*/
+
+	pcl::visualization::RangeImageVisualizer range_image_widget("Range image");
+	range_image_widget.showRangeImage(rangeImage);
+
+	while (!range_image_widget.wasStopped())
+	{
+		range_image_widget.spinOnce();
+	}
+
+	/*while (!viewer.wasStopped())
+	{
+		range_image_widget.spinOnce();
+		viewer.spinOnce();
+		pcl_sleep(0.01);
+	}*/
 }
