@@ -283,6 +283,11 @@ void CMFCForTyre2Dlg::SetNormalPtr(PointCloud<Normal>::Ptr in_cloud)
 	m_normal = in_cloud;
 }
 
+void CMFCForTyre2Dlg::SetCloudRGBPtr(PointCloud<PointXYZRGB>::Ptr in_cloud)
+{
+	m_cloudrgb = in_cloud;
+}
+
 float CMFCForTyre2Dlg::GetCloudMinDist()
 {
 	return m_mindist;
@@ -442,6 +447,7 @@ void CMFCForTyre2Dlg::OnBnClickedNormalest()
 	m_stc_normalest.SetWindowTextA(cs_info + "\r\n" + "Searching project normal, please wait...");
 	SetNormalPtr(cloud_normals);
 
+
 	/*Compute principal curvatures.
 	
 	pcl::PrincipalCurvaturesEstimation<pcl::PointXYZ, pcl::Normal, pcl::PrincipalCurvatures> prncrv;
@@ -455,6 +461,7 @@ void CMFCForTyre2Dlg::OnBnClickedNormalest()
 	*/ 
 
 	//Find main normal for the next preojecting process.
+	
 	Vector3d curNormal, cur_mainNorm;
 	vector<Vector3d> cand_normals;
 	vector<int> cand_normal_len;
@@ -468,7 +475,7 @@ void CMFCForTyre2Dlg::OnBnClickedNormalest()
 		cand_len = cand_normals.size();
 		newNorm = TRUE;
 		curNormal = Vector3d(cloud_normals->points[ii].normal_x, cloud_normals->points[ii].normal_y, cloud_normals->points[ii].normal_z);
-		/*Curvature searching
+		/* Curvature searching
 		tmp_curv = cloud_normals->points[ii].curvature;
 		if (tmp_curv > max_curv)
 		{
@@ -480,8 +487,8 @@ void CMFCForTyre2Dlg::OnBnClickedNormalest()
 			min_curv = tmp_curv;
 		}
 
-		tmp_curv = cloud_curvatures->points[ii].pc1;
-		*/
+		tmp_curv = cloud_curvatures->points[ii].pc1;*/
+		
 		if (curNormal.norm() < ACCURACY || _isnan(curNormal[0]) || _isnan(curNormal[1]) || _isnan(curNormal[2]))
 		{
 			continue;
@@ -534,27 +541,6 @@ void CMFCForTyre2Dlg::OnBnClickedNormalest()
 	m_stc_normalest.SetWindowTextA(cs_info);
 	EnableWindows(TRUE);
 	
-	/*
-	CRect rect;
-	CSize size(0, 0);
-	m_stc_normalest.GetWindowRect(rect);
-	ScreenToClient(&rect);
-	CDC dc=m_stc_normalest.GetWindowDC();
-	CFont *pOldFont = dc.SelectObject(this->GetFont());
-	CString str;
-	m_stc_normalest.GetWindowText(str);
-	if (::GetTextExtentPoint32((HDC)dc, str, str.GetLength(), &size))
-	{
-		rect.right = rect.left + size.cx;
-		rect.bottom = rect.top + size.cy;
-	}
-	else
-	{
-		m_stc_normalest.SetWindowText("GetTextExtentPoint32 fail to get the size of text!");
-	}
-	m_stc_normalest.MoveWindow(rect);
-	dc.SelectObject(pOldFont);
-	*/
 }
 
 CString CMFCForTyre2Dlg::GetTimeSpreadCString(string procstr, LARGE_INTEGER nfreq, LARGE_INTEGER nst, LARGE_INTEGER nend, double& tspread)
@@ -843,6 +829,62 @@ void CMFCForTyre2Dlg::OnBnClickedRunpca()
 	SelfAdjointEigenSolver<Matrix3f> eigen_solver(covariance, ComputeEigenvectors);
 	Matrix3f eigenVecotorsPCA = eigen_solver.eigenvectors();
 	Vector3f eigenValuesPCA = eigen_solver.eigenvalues();
+
+	PointCloud<Normal>::Ptr cur_normals = GetNormalPtr();
+	PointCloud<PointXYZRGB>::Ptr cld_rgb(::new PointCloud<PointXYZRGB>);
+	PointXYZRGB tmprgb;
+	Vector3d mineigenVector(eigenVecotorsPCA(0,0), eigenVecotorsPCA(0, 1), eigenVecotorsPCA(0, 2));
+	Vector3d normalPtr;
+	vector<double> angles(cur_normals->points.size());
+	vector<size_t> ppoinID;
+	double cur_angle = 0.0;
+	for (size_t ii = 0; ii < cur_normals->points.size(); ++ii)
+	{
+		normalPtr = Vector3d(cur_normals->points[ii].normal_x, cur_normals->points[ii].normal_y, cur_normals->points[ii].normal_z);
+		tmprgb.x = cloud->points[ii].x;
+		tmprgb.y = cloud->points[ii].y;
+		tmprgb.z = cloud->points[ii].z;
+		if (normalPtr.norm() < ACCURACY || _isnan(normalPtr[0]) || _isnan(normalPtr[1]) || _isnan(normalPtr[2]))
+		{
+			continue;
+		}
+		cur_angle = acos((normalPtr.dot(mineigenVector)) / (normalPtr.norm()*mineigenVector.norm())) / M_PI * 180;
+		angles[ii]=cur_angle;
+		if (cur_angle > 85 && cur_angle < 95)
+		{
+			ppoinID.push_back(ii);
+			tmprgb.r = 255;
+			tmprgb.g = 0;
+			tmprgb.b = 0;
+		}
+		else
+		{
+			tmprgb.r = 0;
+			tmprgb.g = 0;
+			tmprgb.b = 255;
+		}
+		cld_rgb->points.push_back(tmprgb);
+	}
+	SetCloudRGBPtr(cld_rgb);
+	CString cs_file;
+	m_stc_openfile.GetWindowTextA(cs_file);
+	SaveCloudInPLY(cs_file, ORIGINRGB);
+	//Show colored point cloud.
+	boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer(::new pcl::visualization::PCLVisualizer("3D Viewer"));
+	viewer->setBackgroundColor(0, 0, 0);
+	//pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgb(cloud);
+	//viewer->addPointCloud<pcl::PointXYZRGB>(cloud, cld_rgb, "sample cloud");
+	viewer->addPointCloud(cld_rgb, "sample cloud");
+	viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 3, "sample cloud");
+	//viewer->addCoordinateSystem(1.0);
+	viewer->initCameraParameters();
+
+	while (!viewer->wasStopped())
+	{
+		viewer->spinOnce(100);
+		boost::this_thread::sleep(boost::posix_time::microseconds(100000));
+	}
+
 	/* Transformation and save file processes.
 	Matrix4f transform(Eigen::Matrix4f::Identity());
 	transform.block<3, 3>(0, 0) = eigenVecotorsPCA.transpose();
@@ -869,6 +911,8 @@ void CMFCForTyre2Dlg::OnBnClickedRunpca()
 	}
 	*/
 
+
+	//Print eigen values and vectors into static text control.
 	CString vectorStr, tmpstr;
 	for (Eigen::Index ii = 0; ii < eigenVecotorsPCA.size(); ++ii)
 	{
@@ -934,6 +978,9 @@ int CMFCForTyre2Dlg::SaveCloudInPLY(CString in_path, CLOUDTYPE in_type, CLOUDTYP
 			fe = pcl::io::savePLYFile(savepath + "_p_tra." + ftype, *m_transcld);
 			break;
 		}
+	case ORIGINRGB:
+		fe = pcl::io::savePLYFile(savepath + "_rgb." + ftype, *m_cloudrgb);
+		break;
 	}
 	return 0;
 }
