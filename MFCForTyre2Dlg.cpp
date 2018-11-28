@@ -288,6 +288,11 @@ void CMFCForTyre2Dlg::SetCloudRGBPtr(PointCloud<PointXYZRGB>::Ptr in_cloud)
 	m_cloudrgb = in_cloud;
 }
 
+void CMFCForTyre2Dlg::SetCloudIPtr(PointCloud<PointXYZI>::Ptr in_cloud)
+{
+	m_cloudi = in_cloud;
+}
+
 float CMFCForTyre2Dlg::GetCloudMinDist()
 {
 	return m_mindist;
@@ -832,18 +837,23 @@ void CMFCForTyre2Dlg::OnBnClickedRunpca()
 
 	PointCloud<Normal>::Ptr cur_normals = GetNormalPtr();
 	PointCloud<PointXYZRGB>::Ptr cld_rgb(::new PointCloud<PointXYZRGB>);
+	PointCloud<PointXYZI>::Ptr cld_xyzi(::new PointCloud<PointXYZI>);
 	PointXYZRGB tmprgb;
+	PointXYZI tmpi;
 	Vector3d mineigenVector(eigenVecotorsPCA(0,0), eigenVecotorsPCA(0, 1), eigenVecotorsPCA(0, 2));
-	Vector3d normalPtr;
+	Vector3d normalPtr, pcaCent3d(pcaCentroid(0), pcaCentroid(1), pcaCentroid(2)), curpoint, curvector;
 	vector<double> angles(cur_normals->points.size());
 	vector<size_t> ppoinID;
 	double cur_angle = 0.0;
 	for (size_t ii = 0; ii < cur_normals->points.size(); ++ii)
 	{
 		normalPtr = Vector3d(cur_normals->points[ii].normal_x, cur_normals->points[ii].normal_y, cur_normals->points[ii].normal_z);
+		curpoint = Vector3d(cloud->points[ii].x, cloud->points[ii].y, cloud->points[ii].z);
+		curvector = curpoint - pcaCent3d;
 		tmprgb.x = cloud->points[ii].x;
 		tmprgb.y = cloud->points[ii].y;
 		tmprgb.z = cloud->points[ii].z;
+
 		if (normalPtr.norm() < ACCURACY || _isnan(normalPtr[0]) || _isnan(normalPtr[1]) || _isnan(normalPtr[2]))
 		{
 			continue;
@@ -856,6 +866,11 @@ void CMFCForTyre2Dlg::OnBnClickedRunpca()
 			tmprgb.r = 255;
 			tmprgb.g = 0;
 			tmprgb.b = 0;
+			tmpi.x = cloud->points[ii].x;
+			tmpi.y = cloud->points[ii].y;
+			tmpi.z = cloud->points[ii].z;
+			tmpi.intensity = curvector.dot(normalPtr);
+			cld_xyzi->push_back(tmpi);
 		}
 		else
 		{
@@ -868,7 +883,11 @@ void CMFCForTyre2Dlg::OnBnClickedRunpca()
 	SetCloudRGBPtr(cld_rgb);
 	CString cs_file;
 	m_stc_openfile.GetWindowTextA(cs_file);
-	SaveCloudInPLY(cs_file, ORIGINRGB);
+	//SaveCloudInPLY(cs_file, ORIGINRGB);
+
+	SetCloudIPtr(cld_xyzi);
+	SaveCloudInPLY(cs_file, ORIGINI);
+	
 	//Show colored point cloud.
 	boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer(::new pcl::visualization::PCLVisualizer("3D Viewer"));
 	viewer->setBackgroundColor(0, 0, 0);
@@ -978,11 +997,15 @@ int CMFCForTyre2Dlg::SaveCloudInPLY(CString in_path, CLOUDTYPE in_type, CLOUDTYP
 			fe = pcl::io::savePLYFile(savepath + "_p_tra." + ftype, *m_transcld);
 			break;
 		}
+		break;
 	case ORIGINRGB:
 		fe = pcl::io::savePLYFile(savepath + "_rgb." + ftype, *m_cloudrgb);
 		break;
+	case ORIGINI:
+		fe = pcl::io::savePLYFile(savepath + "_i." + ftype, *m_cloudi);
+		break;
 	}
-	return 0;
+	return fe;
 }
 
 

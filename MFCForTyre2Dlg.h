@@ -45,6 +45,7 @@ enum CLOUDTYPE
 {
 	ORIGIN,
 	ORIGINRGB,
+	ORIGINI,
 	PROJECTED,
 	TRANSFORMED,
 	NORMALS
@@ -157,6 +158,7 @@ public:
 private:
 	PointCloud<PointXYZ>::Ptr m_cloud;//Original Point Cloud
 	PointCloud<PointXYZRGB>::Ptr m_cloudrgb;//Original Point Cloud with RGB
+	PointCloud<PointXYZI>::Ptr m_cloudi;//Original Point Cloud with Intensity(Depth)
 	PointCloud<PointXYZ>::Ptr m_prjcld;//Point Cloud which is projected onto a plane.
 	PointCloud<PointXYZ>::Ptr m_transcld;//Transformed Point Cloud
 	PointCloud<Normal>::Ptr m_normal;//Normal Point Cloud
@@ -170,6 +172,7 @@ public:
 	void SetCloudPtr(PointCloud<PointXYZ>::Ptr in_cloud, CLOUDTYPE in_type);
 	void SetNormalPtr(PointCloud<Normal>::Ptr in_cloud);
 	void SetCloudRGBPtr(PointCloud<PointXYZRGB>::Ptr in_cloud);
+	void SetCloudIPtr(PointCloud<PointXYZI>::Ptr in_cloud);
 
 	float GetCloudMinDist();
 
