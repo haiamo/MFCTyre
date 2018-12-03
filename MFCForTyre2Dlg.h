@@ -29,6 +29,7 @@
 #include <pcl\features\principal_curvatures.h>
 #include <pcl\common\transforms.h>
 #include <pcl\range_image\range_image.h>
+#include <pcl\octree\octree.h>
 
 //opencv 
 #include <opencv2\core\core.hpp>
@@ -126,6 +127,7 @@ protected:
 	CStatic m_stc_normalest;
 	CStatic m_stc_ne_threadnum;
 	CStatic m_stc_ne_indexfolder;
+	CStatic m_stc_ne_kneighbors;
 	CStatic m_stc_projecttoplane;
 	CStatic m_stc_runpca;
 	CStatic m_stc_convertimg;
@@ -135,6 +137,7 @@ protected:
 	CEdit m_edt_ne_radius;
 	CEdit m_edt_ne_threadnum;
 	CEdit m_edt_ne_indexfolder;
+	CEdit m_edt_ne_kneighbors;
 	CEdit m_edt_ci_normalindex;
 	CEdit m_edt_pa_normalindex;
 	CEdit m_edt_pa_senpos_x;

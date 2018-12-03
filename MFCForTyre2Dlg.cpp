@@ -74,6 +74,7 @@ void CMFCForTyre2Dlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, STC_NE_Radius, m_stc_ne_radius);
 	DDX_Control(pDX, STC_NE_ThreadNum, m_stc_ne_threadnum);
 	DDX_Control(pDX, STC_NE_IndexFolder, m_stc_ne_indexfolder);
+	DDX_Control(pDX, STC_NE_KNeighbors, m_stc_ne_kneighbors);
 	DDX_Control(pDX, STC_ProjectToPlane, m_stc_projecttoplane);
 	DDX_Control(pDX, STC_RunPCA, m_stc_runpca);
 	DDX_Control(pDX, STC_ConvertImg, m_stc_convertimg);
@@ -81,6 +82,7 @@ void CMFCForTyre2Dlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, EDT_NE_Radius, m_edt_ne_radius);
 	DDX_Control(pDX, EDT_NE_ThreadNum, m_edt_ne_threadnum);
 	DDX_Control(pDX, EDT_NE_IndexFolder, m_edt_ne_indexfolder);
+	DDX_Control(pDX, EDT_NE_KNeighbors, m_edt_ne_kneighbors);
 	DDX_Control(pDX, EDT_CI_NormalIndex, m_edt_ci_normalindex);
 	DDX_Control(pDX, EDT_PA_SenPos_X, m_edt_pa_senpos_x);
 	DDX_Control(pDX, EDT_PA_SenPos_Y, m_edt_pa_senpos_y);
@@ -142,6 +144,7 @@ BOOL CMFCForTyre2Dlg::OnInitDialog()
 	m_edt_ne_radius.SetWindowTextA("0.1");
 	m_edt_ne_threadnum.SetWindowTextA("2");
 	m_edt_ne_indexfolder.SetWindowTextA("10");
+	m_edt_ne_kneighbors.SetWindowTextA("30");
 	
 	m_edt_ci_normalindex.SetWindowTextA("0");
 
@@ -421,19 +424,37 @@ void CMFCForTyre2Dlg::OnBnClickedNormalest()
 
 	// Set searching neighbor radius or k-neighbors.
 	double radius = GetValueFromCString(&m_edt_ne_radius);
-	ne.setRadiusSearch(radius);
 	double indfolder = GetValueFromCString(&m_edt_ne_indexfolder);
-	//ne.setKSearch(int(floor(indfolder)));
+	double knghbors = GetValueFromCString(&m_edt_ne_kneighbors);
+	if (radius > 0)
+	{
+		ne.setRadiusSearch(radius);
+		m_edt_ne_kneighbors.EnableWindow(FALSE);
+	}
+	else if (knghbors > 0)
+	{
+		m_edt_ne_kneighbors.EnableWindow(TRUE);
+		ne.setKSearch(int(floor(knghbors)));
+	}
+	else
+	{
+		m_edt_ne_radius.SetWindowTextA("0.1");
+		ne.setRadiusSearch(0.1);
+		m_edt_ne_kneighbors.EnableWindow(FALSE);
+	}
+	
 
 	//Set searching indices of cloud points
-	
-	vector<int> indices(floor(cloud->points.size() / int(indfolder)));
-	for (int ii = 0; ii<indices.size(); ++ii)
+	if (indfolder > 2.0)
 	{
-		indices[ii] = ii * int(indfolder);
+		vector<int> indices(floor(cloud->points.size() / int(indfolder)));
+		for (int ii = 0; ii<indices.size(); ++ii)
+		{
+			indices[ii] = ii * int(indfolder);
+		}
+		IndicesPtr indicesptr(new vector<int>(indices));
+		ne.setIndices(indicesptr);
 	}
-	IndicesPtr indicesptr(new vector<int>(indices));
-	ne.setIndices(indicesptr);
 
 	//Searching normals
 	CString cs_info;
@@ -447,9 +468,9 @@ void CMFCForTyre2Dlg::OnBnClickedNormalest()
 	QueryPerformanceCounter(&nend);
 	double nespread = 0.0;
 	cs_info = GetTimeSpreadCString("Normal estimating successfully", nfreq, nst, nend,nespread);
-	cs_info = cs_info + "\r\n" + "With " + to_string(indices.size()).c_str() + " indices.";
+	//cs_info = cs_info + "\r\n" + "With " + to_string(indices.size()).c_str() + " indices.";
 	//cs_info = cs_info + "\r\n" + "Searching project normal, please wait...";
-	m_stc_normalest.SetWindowTextA(cs_info + "\r\n" + "Searching project normal, please wait...");
+	m_stc_normalest.SetWindowTextA(cs_info);// +"\r\n" + "Searching project normal, please wait...");
 	SetNormalPtr(cloud_normals);
 
 
@@ -466,7 +487,7 @@ void CMFCForTyre2Dlg::OnBnClickedNormalest()
 	*/ 
 
 	//Find main normal for the next preojecting process.
-	
+	/*
 	Vector3d curNormal, cur_mainNorm;
 	vector<Vector3d> cand_normals;
 	vector<int> cand_normal_len;
@@ -480,7 +501,7 @@ void CMFCForTyre2Dlg::OnBnClickedNormalest()
 		cand_len = cand_normals.size();
 		newNorm = TRUE;
 		curNormal = Vector3d(cloud_normals->points[ii].normal_x, cloud_normals->points[ii].normal_y, cloud_normals->points[ii].normal_z);
-		/* Curvature searching
+		// Curvature searching
 		tmp_curv = cloud_normals->points[ii].curvature;
 		if (tmp_curv > max_curv)
 		{
@@ -492,7 +513,7 @@ void CMFCForTyre2Dlg::OnBnClickedNormalest()
 			min_curv = tmp_curv;
 		}
 
-		tmp_curv = cloud_curvatures->points[ii].pc1;*/
+		tmp_curv = cloud_curvatures->points[ii].pc1;
 		
 		if (curNormal.norm() < ACCURACY || _isnan(curNormal[0]) || _isnan(curNormal[1]) || _isnan(curNormal[2]))
 		{
@@ -544,6 +565,7 @@ void CMFCForTyre2Dlg::OnBnClickedNormalest()
 		cs_info = cs_info + "\r\n" + "Failed to get the project normal, please check data!";
 	}
 	m_stc_normalest.SetWindowTextA(cs_info);
+	*/
 	EnableWindows(TRUE);
 	
 }
@@ -835,6 +857,7 @@ void CMFCForTyre2Dlg::OnBnClickedRunpca()
 	Matrix3f eigenVecotorsPCA = eigen_solver.eigenvectors();
 	Vector3f eigenValuesPCA = eigen_solver.eigenvalues();
 
+	//Searching pins' positions and length, using XYZI structure.
 	PointCloud<Normal>::Ptr cur_normals = GetNormalPtr();
 	PointCloud<PointXYZRGB>::Ptr cld_rgb(::new PointCloud<PointXYZRGB>);
 	PointCloud<PointXYZI>::Ptr cld_xyzi(::new PointCloud<PointXYZI>);
@@ -844,7 +867,7 @@ void CMFCForTyre2Dlg::OnBnClickedRunpca()
 	Vector3d normalPtr, pcaCent3d(pcaCentroid(0), pcaCentroid(1), pcaCentroid(2)), curpoint, curvector;
 	vector<double> angles(cur_normals->points.size());
 	vector<size_t> ppoinID;
-	double cur_angle = 0.0;
+	double cur_angle = 0.0, cur_len = 0.0;
 	for (size_t ii = 0; ii < cur_normals->points.size(); ++ii)
 	{
 		normalPtr = Vector3d(cur_normals->points[ii].normal_x, cur_normals->points[ii].normal_y, cur_normals->points[ii].normal_z);
@@ -866,11 +889,15 @@ void CMFCForTyre2Dlg::OnBnClickedRunpca()
 			tmprgb.r = 255;
 			tmprgb.g = 0;
 			tmprgb.b = 0;
-			tmpi.x = cloud->points[ii].x;
-			tmpi.y = cloud->points[ii].y;
-			tmpi.z = cloud->points[ii].z;
-			tmpi.intensity = curvector.dot(normalPtr);
-			cld_xyzi->push_back(tmpi);
+			cur_len = curvector.dot(normalPtr);
+			if (cur_len > 0)
+			{
+				tmpi.x = cloud->points[ii].x;
+				tmpi.y = cloud->points[ii].y;
+				tmpi.z = cloud->points[ii].z;
+				tmpi.intensity = cur_len;
+				cld_xyzi->push_back(tmpi);
+			}
 		}
 		else
 		{
@@ -883,10 +910,26 @@ void CMFCForTyre2Dlg::OnBnClickedRunpca()
 	SetCloudRGBPtr(cld_rgb);
 	CString cs_file;
 	m_stc_openfile.GetWindowTextA(cs_file);
-	//SaveCloudInPLY(cs_file, ORIGINRGB);
+	SaveCloudInPLY(cs_file, ORIGINRGB);
 
 	SetCloudIPtr(cld_xyzi);
 	SaveCloudInPLY(cs_file, ORIGINI);
+
+	//Re-searching candidate pins' positions and length
+	pcl::octree::OctreePointCloudSearch<pcl::PointXYZ> octree(1.0f);
+	octree.setInputCloud(cloud);
+	octree.addPointsFromInputCloud();
+	std::vector<int>pointIdxRadiusSearch;
+	std::vector<float>pointRadiusSquaredDistance;
+	float radius = GetValueFromCString(&m_edt_ne_radius);
+	PointXYZ cur_pt;
+	for (size_t ii = 0; ii < cld_xyzi->points.size(); ++ii)
+	{
+		cur_pt.x = cld_xyzi->points[ii].x;
+		cur_pt.y = cld_xyzi->points[ii].y;
+		cur_pt.z = cld_xyzi->points[ii].z;
+		octree.radiusSearch(cur_pt, radius, pointIdxRadiusSearch, pointRadiusSquaredDistance);
+	}
 	
 	//Show colored point cloud.
 	boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer(::new pcl::visualization::PCLVisualizer("3D Viewer"));
