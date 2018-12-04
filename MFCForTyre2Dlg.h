@@ -45,8 +45,10 @@ using namespace cv;
 enum CLOUDTYPE
 {
 	ORIGIN,
+	ORIGINNONZEROS,
 	ORIGINRGB,
 	ORIGINI,
+	ORIGININORMAL,
 	PROJECTED,
 	TRANSFORMED,
 	NORMALS
@@ -139,7 +141,6 @@ protected:
 	CEdit m_edt_ne_indexfolder;
 	CEdit m_edt_ne_kneighbors;
 	CEdit m_edt_ci_normalindex;
-	CEdit m_edt_pa_normalindex;
 	CEdit m_edt_pa_senpos_x;
 	CEdit m_edt_pa_senpos_y;
 	CEdit m_edt_pa_senpos_z;
@@ -160,8 +161,10 @@ public:
 // PCL parameters and methods.
 private:
 	PointCloud<PointXYZ>::Ptr m_cloud;//Original Point Cloud
+	PointCloud<PointXYZ>::Ptr m_cloud_nonzeros;//Original Point cloud with non-zeros points.
 	PointCloud<PointXYZRGB>::Ptr m_cloudrgb;//Original Point Cloud with RGB
 	PointCloud<PointXYZI>::Ptr m_cloudi;//Original Point Cloud with Intensity(Depth)
+	PointCloud<PointXYZINormal>::Ptr m_cloudinorm;//Original Point cloud with Intensity(Depth) and point normal.
 	PointCloud<PointXYZ>::Ptr m_prjcld;//Point Cloud which is projected onto a plane.
 	PointCloud<PointXYZ>::Ptr m_transcld;//Transformed Point Cloud
 	PointCloud<Normal>::Ptr m_normal;//Normal Point Cloud
@@ -176,6 +179,7 @@ public:
 	void SetNormalPtr(PointCloud<Normal>::Ptr in_cloud);
 	void SetCloudRGBPtr(PointCloud<PointXYZRGB>::Ptr in_cloud);
 	void SetCloudIPtr(PointCloud<PointXYZI>::Ptr in_cloud);
+	void SetCloudINormalPtr(PointCloud<PointXYZINormal>::Ptr in_cloud);
 
 	float GetCloudMinDist();
 

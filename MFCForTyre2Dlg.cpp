@@ -244,6 +244,7 @@ void CMFCForTyre2Dlg::SetCloudPtr(PointCloud<PointXYZ>::Ptr in_cloud,CLOUDTYPE i
 {
 	double curdist = 0.0;
 	Vector3d v3row, v3col;	
+	PointXYZ curpoint;
 	switch (in_type)
 	{
 	case ORIGIN:
@@ -268,6 +269,21 @@ void CMFCForTyre2Dlg::SetCloudPtr(PointCloud<PointXYZ>::Ptr in_cloud,CLOUDTYPE i
 			else if (curdist > ACCURACY && curdist < m_mindist)
 			{
 				m_mindist = curdist;
+			}
+		}
+		break;
+	case ORIGINNONZEROS:
+		m_cloud = in_cloud;
+		if (!m_cloud_nonzeros)
+		{
+			m_cloud_nonzeros.reset(::new PointCloud<PointXYZ>);
+		}
+		for (size_t ii = 0; ii < in_cloud->points.size(); ++ii)
+		{
+			if (abs(in_cloud->points[ii].x)>ACCURACY  && abs(in_cloud->points[ii].y)>ACCURACY && abs(in_cloud->points[ii].z)>ACCURACY)
+			{
+				curpoint = in_cloud->points[ii];
+				m_cloud_nonzeros->points.push_back(curpoint);
 			}
 		}
 		break;
@@ -296,6 +312,11 @@ void CMFCForTyre2Dlg::SetCloudIPtr(PointCloud<PointXYZI>::Ptr in_cloud)
 	m_cloudi = in_cloud;
 }
 
+void CMFCForTyre2Dlg::SetCloudINormalPtr(PointCloud<PointXYZINormal>::Ptr in_cloud)
+{
+	m_cloudinorm = in_cloud;
+}
+
 float CMFCForTyre2Dlg::GetCloudMinDist()
 {
 	return m_mindist;
@@ -311,7 +332,19 @@ BOOL CMFCForTyre2Dlg::EnableWindows(BOOL bEnable)
 	m_rad_pcaorigin.EnableWindow(bEnable);
 	m_rad_pcaprojected.EnableWindow(bEnable);
 	m_btn_convertimg.EnableWindow(bEnable);
-	m_stc_convertimg.EnableWindow(bEnable);
+
+	m_edt_ne_radius.EnableWindow(bEnable);
+	m_edt_ne_threadnum.EnableWindow(bEnable);
+	m_edt_ne_indexfolder.EnableWindow(bEnable);
+	m_edt_ne_kneighbors.EnableWindow(bEnable);
+	m_edt_ci_normalindex.EnableWindow(bEnable);
+	m_edt_pa_senpos_x.EnableWindow(bEnable);
+	m_edt_pa_senpos_y.EnableWindow(bEnable);
+	m_edt_pa_senpos_z.EnableWindow(bEnable);
+	m_edt_pa_angres.EnableWindow(bEnable);
+	m_edt_pa_maxangwi.EnableWindow(bEnable);
+	m_edt_pa_maxanghi.EnableWindow(bEnable);
+
 	return bEnable;
 }
 
@@ -377,6 +410,8 @@ void CMFCForTyre2Dlg::OnBnClickedOpenfile()
 		cs_info = cs_info + "\r\n" + "Minmum distance in cloud is " + to_string(GetCloudMinDist()).c_str()+".";
 		m_stc_loaddata.SetWindowTextA(cs_info);
 
+		SetCloudPtr(cloud, CLOUDTYPE::ORIGINNONZEROS);
+		//SaveCloudInPLY(cs_file, CLOUDTYPE::ORIGINNONZEROS);
 		/*
 		Show original and projected cloud points.
 		boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer(new pcl::visualization::PCLVisualizer("MyPointCloud"));
@@ -861,13 +896,16 @@ void CMFCForTyre2Dlg::OnBnClickedRunpca()
 	PointCloud<Normal>::Ptr cur_normals = GetNormalPtr();
 	PointCloud<PointXYZRGB>::Ptr cld_rgb(::new PointCloud<PointXYZRGB>);
 	PointCloud<PointXYZI>::Ptr cld_xyzi(::new PointCloud<PointXYZI>);
+	PointCloud<PointXYZINormal>::Ptr cld_xyzin(::new PointCloud<PointXYZINormal>);
 	PointXYZRGB tmprgb;
 	PointXYZI tmpi;
+	PointXYZINormal tmpin;
 	Vector3d mineigenVector(eigenVecotorsPCA(0,0), eigenVecotorsPCA(0, 1), eigenVecotorsPCA(0, 2));
 	Vector3d normalPtr, pcaCent3d(pcaCentroid(0), pcaCentroid(1), pcaCentroid(2)), curpoint, curvector;
 	vector<double> angles(cur_normals->points.size());
 	vector<size_t> ppoinID;
 	double cur_angle = 0.0, cur_len = 0.0;
+	int angle_range = 5;
 	for (size_t ii = 0; ii < cur_normals->points.size(); ++ii)
 	{
 		normalPtr = Vector3d(cur_normals->points[ii].normal_x, cur_normals->points[ii].normal_y, cur_normals->points[ii].normal_z);
@@ -883,20 +921,30 @@ void CMFCForTyre2Dlg::OnBnClickedRunpca()
 		}
 		cur_angle = acos((normalPtr.dot(mineigenVector)) / (normalPtr.norm()*mineigenVector.norm())) / M_PI * 180;
 		angles[ii]=cur_angle;
-		if (cur_angle > 85 && cur_angle < 95)
+		if (cur_angle > 90.0-angle_range && cur_angle < 90+angle_range)
 		{
 			ppoinID.push_back(ii);
 			tmprgb.r = 255;
 			tmprgb.g = 0;
 			tmprgb.b = 0;
 			cur_len = curvector.dot(normalPtr);
-			if (cur_len > 0)
+			if (cur_len < 0)
 			{
 				tmpi.x = cloud->points[ii].x;
 				tmpi.y = cloud->points[ii].y;
 				tmpi.z = cloud->points[ii].z;
 				tmpi.intensity = cur_len;
 				cld_xyzi->push_back(tmpi);
+
+				tmpin.x = tmpi.x;
+				tmpin.y = tmpi.y;
+				tmpin.z = tmpi.z;
+				tmpin.intensity = tmpi.intensity;
+				tmpin.normal_x = cur_normals->points[ii].normal_x;
+				tmpin.normal_y = cur_normals->points[ii].normal_y;
+				tmpin.normal_z = cur_normals->points[ii].normal_z;
+				tmpin.curvature = cur_normals->points[ii].curvature;
+				cld_xyzin->push_back(tmpin);
 			}
 		}
 		else
@@ -915,23 +963,54 @@ void CMFCForTyre2Dlg::OnBnClickedRunpca()
 	SetCloudIPtr(cld_xyzi);
 	SaveCloudInPLY(cs_file, ORIGINI);
 
+	SetCloudINormalPtr(cld_xyzin);
+	SaveCloudInPLY(cs_file, ORIGININORMAL);
+
 	//Re-searching candidate pins' positions and length
 	pcl::octree::OctreePointCloudSearch<pcl::PointXYZ> octree(1.0f);
 	octree.setInputCloud(cloud);
 	octree.addPointsFromInputCloud();
-	std::vector<int>pointIdxRadiusSearch;
-	std::vector<float>pointRadiusSquaredDistance;
-	float radius = GetValueFromCString(&m_edt_ne_radius);
+	std::vector<int>pointIdxRadiusSearch, pointIdxKSearch;
+	std::vector<float>pointRadiusSquaredDistance, pointKSquareDistance;
+	vector<double> cand_dist;
+	double radius = GetValueFromCString(&m_edt_ne_radius);
+	double tmpdist = 0.0;
 	PointXYZ cur_pt;
+	PointCloud<PointXYZINormal>::Ptr mod_xyzinormal(::new PointCloud<PointXYZINormal>);
+	PointCloud<PointXYZI>::Ptr mod_xyzi(::new PointCloud<PointXYZI>);
+	vector<int> indexList;
+	int curID;
 	for (size_t ii = 0; ii < cld_xyzi->points.size(); ++ii)
 	{
 		cur_pt.x = cld_xyzi->points[ii].x;
 		cur_pt.y = cld_xyzi->points[ii].y;
 		cur_pt.z = cld_xyzi->points[ii].z;
+		tmpi.x = cur_pt.x;
+		tmpi.y = cur_pt.y;
+		tmpi.z = cur_pt.z;
+		octree.nearestKSearch(cur_pt, 20, pointIdxKSearch, pointKSquareDistance);
+		for (size_t jj = 0; jj < pointIdxKSearch.size(); ++jj)
+		{	
+			curID = pointIdxKSearch[jj];
+			curpoint = Vector3d(cloud->points[curID].x, cloud->points[curID].y, cloud->points[curID].z);
+			curvector = curpoint - pcaCent3d;
+			tmpin.x = cloud->points[curID].x;
+			tmpin.y = cloud->points[curID].y;
+			tmpin.z = cloud->points[curID].z;
+			tmpin.intensity = curvector.dot(mineigenVector);
+			tmpin.normal_x = cur_normals->points[curID].normal_x;
+			tmpin.normal_y = cur_normals->points[curID].normal_y;
+			tmpin.normal_z = cur_normals->points[curID].normal_z;
+			tmpin.curvature = cur_normals->points[curID].curvature;
+		}
 		octree.radiusSearch(cur_pt, radius, pointIdxRadiusSearch, pointRadiusSquaredDistance);
+		tmpi.intensity = pointIdxRadiusSearch.size();
+		mod_xyzi->points.push_back(tmpi);
+		indexList.push_back(int(tmpi.intensity));
 	}
 	
 	//Show colored point cloud.
+	/*
 	boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer(::new pcl::visualization::PCLVisualizer("3D Viewer"));
 	viewer->setBackgroundColor(0, 0, 0);
 	//pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgb(cloud);
@@ -946,7 +1025,7 @@ void CMFCForTyre2Dlg::OnBnClickedRunpca()
 		viewer->spinOnce(100);
 		boost::this_thread::sleep(boost::posix_time::microseconds(100000));
 	}
-
+	*/
 	/* Transformation and save file processes.
 	Matrix4f transform(Eigen::Matrix4f::Identity());
 	transform.block<3, 3>(0, 0) = eigenVecotorsPCA.transpose();
@@ -976,6 +1055,29 @@ void CMFCForTyre2Dlg::OnBnClickedRunpca()
 
 	//Print eigen values and vectors into static text control.
 	CString vectorStr, tmpstr;
+	for (Eigen::Index ii = 0; ii < pcaCentroid.size()-1; ++ii)
+	{
+		if (ii < 2)
+		{
+			tmpstr.Format("%lf, ", pcaCentroid(ii));
+			vectorStr += tmpstr;
+		}
+		else
+		{
+			tmpstr.Format("%lf", pcaCentroid(ii));
+			vectorStr = vectorStr + tmpstr + "\r\n";
+		}
+	}
+	if (cs_info.IsEmpty())
+	{
+		cs_info = "PCA Centroid:\r\n" + vectorStr;
+	}
+	else
+	{
+		cs_info = cs_info + "\r\n" + "PCA Centroid:\r\n" + vectorStr;
+	}
+	
+	vectorStr = "";
 	for (Eigen::Index ii = 0; ii < eigenVecotorsPCA.size(); ++ii)
 	{
 		if (ii % 3 == 2)
@@ -1027,6 +1129,9 @@ int CMFCForTyre2Dlg::SaveCloudInPLY(CString in_path, CLOUDTYPE in_type, CLOUDTYP
 	case ORIGIN:
 		fe = pcl::io::savePLYFile(savepath + "_org." + ftype, *m_cloud);
 		break;
+	case ORIGINNONZEROS:
+		fe = pcl::io::savePLYFile(savepath + "_nonzeros." + ftype, *m_cloud_nonzeros);
+		break;
 	case PROJECTED:
 		fe = pcl::io::savePLYFile(savepath + "_prj." + ftype, *m_prjcld);
 		break;
@@ -1046,6 +1151,9 @@ int CMFCForTyre2Dlg::SaveCloudInPLY(CString in_path, CLOUDTYPE in_type, CLOUDTYP
 		break;
 	case ORIGINI:
 		fe = pcl::io::savePLYFile(savepath + "_i." + ftype, *m_cloudi);
+		break;
+	case ORIGININORMAL:
+		fe = pcl::io::savePLYFile(savepath + "_in." + ftype, *m_cloudinorm);
 		break;
 	}
 	return fe;
