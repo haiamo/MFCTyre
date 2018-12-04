@@ -1002,13 +1002,15 @@ void CMFCForTyre2Dlg::OnBnClickedRunpca()
 			tmpin.normal_y = cur_normals->points[curID].normal_y;
 			tmpin.normal_z = cur_normals->points[curID].normal_z;
 			tmpin.curvature = cur_normals->points[curID].curvature;
+			mod_xyzinormal->points.push_back(tmpin);
 		}
 		octree.radiusSearch(cur_pt, radius, pointIdxRadiusSearch, pointRadiusSquaredDistance);
 		tmpi.intensity = pointIdxRadiusSearch.size();
 		mod_xyzi->points.push_back(tmpi);
 		indexList.push_back(int(tmpi.intensity));
 	}
-	
+	SetCloudINormalPtr(mod_xyzinormal);
+	SaveCloudInPLY(cs_file, ORIGININORMAL);
 	//Show colored point cloud.
 	/*
 	boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer(::new pcl::visualization::PCLVisualizer("3D Viewer"));
