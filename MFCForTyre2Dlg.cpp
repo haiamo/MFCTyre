@@ -358,6 +358,10 @@ void CMFCForTyre2Dlg::OnBnClickedOpenfile()
 		filepath = fileopendlg.GetPathName();
 		m_stc_openfile.SetWindowTextA(filepath);
 	}
+	else
+	{
+		m_stc_openfile.SetWindowTextA("");
+	}
 
 	// Load point cloud file
 	LARGE_INTEGER nfreq, nst, nend;//Timer parameters.
@@ -371,69 +375,72 @@ void CMFCForTyre2Dlg::OnBnClickedOpenfile()
 		MessageBox("The file path is empty, please check again.", "Load Info", MB_OK | MB_ICONERROR);
 		m_stc_loaddata.SetWindowTextA("Loading failed: empty file path");
 	}
-	int f_error = -1;
-	string filetype = pcfile.substr(pcfile.length() - 4, 4);
-	const char* filetype_c = filetype.data();
-	if (0 == strcmp(filetype_c, ".ply"))
-	{
-		m_stc_loaddata.SetWindowTextA("Loading data, please wait...");
-		EnableWindows(FALSE);
-
-		QueryPerformanceFrequency(&nfreq);
-		QueryPerformanceCounter(&nst);
-		f_error = pcl::io::loadPLYFile(pcfile, *cloud);
-		QueryPerformanceCounter(&nend);
-
-		EnableWindows(TRUE);
-	}
 	else
 	{
-		MessageBox("Please load valid .ply file.", "Load file Info", MB_OK | MB_ICONERROR);
-		m_stc_loaddata.SetWindowTextA("Loading failed: not .ply file");
-	}
-
-	if (-1 == f_error)
-	{
-		MessageBox("Failed to load point cloud data, please try again!", "LoadError", MB_OK | MB_ICONERROR);
-		m_stc_loaddata.SetWindowTextA("Loading failed: PCL function failed");
-	}
-	else
-	{
-		double spread = 0.0;
-		CString cs_info = GetTimeSpreadCString("Loading successfully", nfreq, nst, nend, spread);
-		cs_info = cs_info + "\r\n " + "Cloud has " + to_string(cloud->points.size()).c_str() + " pionts.";
-		m_stc_loaddata.SetWindowTextA(cs_info+"\r\n"+"Computing minmum distance, please wait...");
-		QueryPerformanceCounter(&nst);
-		SetCloudPtr(cloud,CLOUDTYPE::ORIGIN);
-		QueryPerformanceCounter(&nend);
-		cs_info = cs_info +"\r\n"+ GetTimeSpreadCString("Compute minmum distance successfully", nfreq, nst, nend, spread);
-		cs_info = cs_info + "\r\n" + "Minmum distance in cloud is " + to_string(GetCloudMinDist()).c_str()+".";
-		m_stc_loaddata.SetWindowTextA(cs_info);
-
-		SetCloudPtr(cloud, CLOUDTYPE::ORIGINNONZEROS);
-		//SaveCloudInPLY(cs_file, CLOUDTYPE::ORIGINNONZEROS);
-		/*
-		Show original and projected cloud points.
-		boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer(new pcl::visualization::PCLVisualizer("MyPointCloud"));
-		viewer->setBackgroundColor(0, 0, 0);
-		viewer->addPointCloud(cloud, "Original one");
-		viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "Original one");
-		viewer->addCoordinateSystem(1.0);
-		viewer->initCameraParameters();
-		
-		viewer->setBackgroundColor(150, 150, 150);
-		viewer->addPointCloud(prjcld, "Project one");
-		viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "sample cloud");
-		viewer->addCoordinateSystem(1.0);
-		viewer->initCameraParameters();
-		
-
-
-		while (!viewer->wasStopped())
+		int f_error = -1;
+		string filetype = pcfile.substr(pcfile.length() - 4, 4);
+		const char* filetype_c = filetype.data();
+		if (0 == strcmp(filetype_c, ".ply"))
 		{
-			viewer->spinOnce(100);
-			boost::this_thread::sleep(boost::posix_time::microseconds(100000));
-		}*/
+			m_stc_loaddata.SetWindowTextA("Loading data, please wait...");
+			EnableWindows(FALSE);
+
+			QueryPerformanceFrequency(&nfreq);
+			QueryPerformanceCounter(&nst);
+			f_error = pcl::io::loadPLYFile(pcfile, *cloud);
+			QueryPerformanceCounter(&nend);
+
+			EnableWindows(TRUE);
+		}
+		else
+		{
+			MessageBox("Please load valid .ply file.", "Load file Info", MB_OK | MB_ICONERROR);
+			m_stc_loaddata.SetWindowTextA("Loading failed: not .ply file");
+		}
+
+		if (-1 == f_error)
+		{
+			MessageBox("Failed to load point cloud data, please try again!", "LoadError", MB_OK | MB_ICONERROR);
+			m_stc_loaddata.SetWindowTextA("Loading failed: PCL function failed");
+		}
+		else
+		{
+			double spread = 0.0;
+			CString cs_info = GetTimeSpreadCString("Loading successfully", nfreq, nst, nend, spread);
+			cs_info = cs_info + "\r\n " + "Cloud has " + to_string(cloud->points.size()).c_str() + " pionts.";
+			m_stc_loaddata.SetWindowTextA(cs_info + "\r\n" + "Computing minmum distance, please wait...");
+			QueryPerformanceCounter(&nst);
+			SetCloudPtr(cloud, CLOUDTYPE::ORIGIN);
+			QueryPerformanceCounter(&nend);
+			cs_info = cs_info + "\r\n" + GetTimeSpreadCString("Compute minmum distance successfully", nfreq, nst, nend, spread);
+			cs_info = cs_info + "\r\n" + "Minmum distance in cloud is " + to_string(GetCloudMinDist()).c_str() + ".";
+			m_stc_loaddata.SetWindowTextA(cs_info);
+
+			SetCloudPtr(cloud, CLOUDTYPE::ORIGINNONZEROS);
+			//SaveCloudInPLY(cs_file, CLOUDTYPE::ORIGINNONZEROS);
+			/*
+			Show original and projected cloud points.
+			boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer(new pcl::visualization::PCLVisualizer("MyPointCloud"));
+			viewer->setBackgroundColor(0, 0, 0);
+			viewer->addPointCloud(cloud, "Original one");
+			viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "Original one");
+			viewer->addCoordinateSystem(1.0);
+			viewer->initCameraParameters();
+
+			viewer->setBackgroundColor(150, 150, 150);
+			viewer->addPointCloud(prjcld, "Project one");
+			viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "sample cloud");
+			viewer->addCoordinateSystem(1.0);
+			viewer->initCameraParameters();
+
+
+
+			while (!viewer->wasStopped())
+			{
+				viewer->spinOnce(100);
+				boost::this_thread::sleep(boost::posix_time::microseconds(100000));
+			}*/
+		}
 	}
 }
 
@@ -625,6 +632,76 @@ double CMFCForTyre2Dlg::GetValueFromCString(CEdit* inEdit)
 	chstr = cstr.GetBuffer();
 	double val = atof(chstr);
 	return val;
+}
+
+PointCloud<PointXYZINormal>::Ptr CMFCForTyre2Dlg::GetNeighborsAlongPin(PointXYZINormal in_pt, Matrix3f eigenV)
+{
+	PointCloud<PointXYZ>::Ptr cloud;
+	if (1 == m_rad_pcaorigin.GetCheck())
+	{
+		cloud = this->GetCloudPtr(CLOUDTYPE::ORIGIN);
+	}
+	else if (1 == m_rad_pcaprojected.GetCheck())
+	{
+		cloud = this->GetCloudPtr(CLOUDTYPE::PROJECTED);
+	}
+
+	pcl::octree::OctreePointCloudSearch<pcl::PointXYZ> octree(1.0f);
+	octree.setInputCloud(cloud);
+	octree.addPointsFromInputCloud();
+	//pt: Point, nbr:neighbors, IRS: Index of Radius Search, IKS: Index of K-neighbors Search, ISM: Index Search Method
+	vector<int> ptIRS;// , ptIKS, ptNbrID, nbrIKS, nbrIRS, nbrISM;
+	//RSD: Radius Squared Distance, KSD: K-neighbors Squared Distance.
+	vector<float> ptRSD;// , ptKSD, nbrRSD, nbrKSD;
+	
+	double radius = GetValueFromCString(&m_edt_ne_radius);
+	//int kneighbors = int(GetValueFromCString(&m_edt_ne_kneighbors));
+	PointXYZ cur_pt;
+	cur_pt.x = in_pt.x;
+	cur_pt.y = in_pt.y;
+	cur_pt.z = in_pt.z;
+	PointXYZINormal cur_pt_in;
+	PointCloud<PointXYZINormal>::Ptr recusionPtr(::new PointCloud<PointXYZINormal>);
+	recusionPtr->points.push_back(in_pt);
+
+	PointCloud<PointXYZINormal>::Ptr tmpPtr;
+	int curID;
+	double angle;
+
+	int normId = int(GetValueFromCString(&m_edt_ci_normalindex));
+	Vector3d curV, mineigenVector(eigenV(normId, 0), eigenV(normId, 1), eigenV(normId, 2));
+
+	//octree.nearestKSearch(cur_pt, kneighbors, ptIKS, ptKSD);
+	octree.radiusSearch(cur_pt, radius, ptIRS, ptRSD);
+	if (ptIRS.size() > 0)
+	{
+		for (size_t ii = 0; ii < ptIRS.size(); ++ii)
+		{
+			curID = ptIRS[ii];
+			cur_pt.x = m_cloud->points[curID].x;
+			cur_pt.y = m_cloud->points[curID].y;
+			cur_pt.z = m_cloud->points[curID].z;
+			curV = Vector3d(cur_pt.x, cur_pt.y, cur_pt.z) - Vector3d(in_pt.x, in_pt.y, in_pt.z);
+			angle = acos((curV.dot(mineigenVector)) / (curV.norm()*mineigenVector.norm())) / M_PI * 180;
+			if (angle < 45.0) 
+			{
+				tmpPtr = GetNeighborsAlongPin(m_cloudinorm->points[curID],eigenV);
+				for (size_t jj = 0; jj < tmpPtr->points.size(); ++jj)
+				{
+					cur_pt_in.x = tmpPtr->points[jj].x;
+					cur_pt_in.y = tmpPtr->points[jj].y;
+					cur_pt_in.z = tmpPtr->points[jj].z;
+					cur_pt_in.intensity = tmpPtr->points[jj].intensity;
+					cur_pt_in.normal_x = tmpPtr->points[jj].normal_x;
+					cur_pt_in.normal_y = tmpPtr->points[jj].normal_y;
+					cur_pt_in.normal_z = tmpPtr->points[jj].normal_z;
+					recusionPtr->points.push_back(cur_pt_in);
+				}
+			}
+		}
+	}
+
+	return recusionPtr;
 }
 
 void CMFCForTyre2Dlg::ShowCurrentCloud(CLOUDTYPE show_type)
@@ -900,12 +977,14 @@ void CMFCForTyre2Dlg::OnBnClickedRunpca()
 	PointXYZRGB tmprgb;
 	PointXYZI tmpi;
 	PointXYZINormal tmpin;
-	Vector3d mineigenVector(eigenVecotorsPCA(0,0), eigenVecotorsPCA(0, 1), eigenVecotorsPCA(0, 2));
+	m_edt_ci_normalindex.SetWindowTextA("0");
+	int normId = int(GetValueFromCString(&m_edt_ci_normalindex));
+	Vector3d mineigenVector(eigenVecotorsPCA(normId,0), eigenVecotorsPCA(normId, 1), eigenVecotorsPCA(normId, 2));
 	Vector3d normalPtr, pcaCent3d(pcaCentroid(0), pcaCentroid(1), pcaCentroid(2)), curpoint, curvector;
 	vector<double> angles(cur_normals->points.size());
 	vector<size_t> ppoinID;
 	double cur_angle = 0.0, cur_len = 0.0;
-	int angle_range = 5;
+	int angle_range = 10;
 	for (size_t ii = 0; ii < cur_normals->points.size(); ++ii)
 	{
 		normalPtr = Vector3d(cur_normals->points[ii].normal_x, cur_normals->points[ii].normal_y, cur_normals->points[ii].normal_z);
@@ -927,7 +1006,7 @@ void CMFCForTyre2Dlg::OnBnClickedRunpca()
 			tmprgb.r = 255;
 			tmprgb.g = 0;
 			tmprgb.b = 0;
-			cur_len = curvector.dot(normalPtr);
+			cur_len = curvector.dot(mineigenVector);
 			if (cur_len < 0)
 			{
 				tmpi.x = cloud->points[ii].x;
@@ -963,51 +1042,23 @@ void CMFCForTyre2Dlg::OnBnClickedRunpca()
 	SetCloudIPtr(cld_xyzi);
 	SaveCloudInPLY(cs_file, ORIGINI);
 
-	SetCloudINormalPtr(cld_xyzin);
-	SaveCloudInPLY(cs_file, ORIGININORMAL);
+	//SetCloudINormalPtr(cld_xyzin);
+	//SaveCloudInPLY(cs_file, ORIGININORMAL);
 
 	//Re-searching candidate pins' positions and length
-	pcl::octree::OctreePointCloudSearch<pcl::PointXYZ> octree(1.0f);
-	octree.setInputCloud(cloud);
-	octree.addPointsFromInputCloud();
-	std::vector<int>pointIdxRadiusSearch, pointIdxKSearch;
-	std::vector<float>pointRadiusSquaredDistance, pointKSquareDistance;
-	vector<double> cand_dist;
-	double radius = GetValueFromCString(&m_edt_ne_radius);
-	double tmpdist = 0.0;
-	PointXYZ cur_pt;
+	PointXYZINormal cur_pt;
 	PointCloud<PointXYZINormal>::Ptr mod_xyzinormal(::new PointCloud<PointXYZINormal>);
-	PointCloud<PointXYZI>::Ptr mod_xyzi(::new PointCloud<PointXYZI>);
-	vector<int> indexList;
-	int curID;
-	for (size_t ii = 0; ii < cld_xyzi->points.size(); ++ii)
+
+	for (size_t ii = 0; ii < cld_xyzin->points.size(); ++ii)
 	{
-		cur_pt.x = cld_xyzi->points[ii].x;
-		cur_pt.y = cld_xyzi->points[ii].y;
-		cur_pt.z = cld_xyzi->points[ii].z;
-		tmpi.x = cur_pt.x;
-		tmpi.y = cur_pt.y;
-		tmpi.z = cur_pt.z;
-		octree.nearestKSearch(cur_pt, 20, pointIdxKSearch, pointKSquareDistance);
-		for (size_t jj = 0; jj < pointIdxKSearch.size(); ++jj)
-		{	
-			curID = pointIdxKSearch[jj];
-			curpoint = Vector3d(cloud->points[curID].x, cloud->points[curID].y, cloud->points[curID].z);
-			curvector = curpoint - pcaCent3d;
-			tmpin.x = cloud->points[curID].x;
-			tmpin.y = cloud->points[curID].y;
-			tmpin.z = cloud->points[curID].z;
-			tmpin.intensity = curvector.dot(mineigenVector);
-			tmpin.normal_x = cur_normals->points[curID].normal_x;
-			tmpin.normal_y = cur_normals->points[curID].normal_y;
-			tmpin.normal_z = cur_normals->points[curID].normal_z;
-			tmpin.curvature = cur_normals->points[curID].curvature;
-			mod_xyzinormal->points.push_back(tmpin);
-		}
-		octree.radiusSearch(cur_pt, radius, pointIdxRadiusSearch, pointRadiusSquaredDistance);
-		tmpi.intensity = pointIdxRadiusSearch.size();
-		mod_xyzi->points.push_back(tmpi);
-		indexList.push_back(int(tmpi.intensity));
+		cur_pt.x = cld_xyzin->points[ii].x;
+		cur_pt.y = cld_xyzin->points[ii].y;
+		cur_pt.z = cld_xyzin->points[ii].z;
+		cur_pt.intensity = cld_xyzin->points[ii].intensity;
+		cur_pt.normal_x = cld_xyzin->points[ii].normal_x;
+		cur_pt.normal_y = cld_xyzin->points[ii].normal_y;
+		cur_pt.normal_z = cld_xyzin->points[ii].normal_z;
+		mod_xyzinormal = GetNeighborsAlongPin(cur_pt, eigenVecotorsPCA);
 	}
 	SetCloudINormalPtr(mod_xyzinormal);
 	SaveCloudInPLY(cs_file, ORIGININORMAL);

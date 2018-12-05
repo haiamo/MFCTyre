@@ -188,6 +188,7 @@ public:
 
 	CString GetTimeSpreadCString(string procstr, LARGE_INTEGER nfreq, LARGE_INTEGER nst, LARGE_INTEGER nend,double& tspread);
 	double GetValueFromCString(CEdit* inEdit);
+	PointCloud<PointXYZINormal>::Ptr GetNeighborsAlongPin(PointXYZINormal in_pt, Matrix3f eigenV);
 
 	void ShowCurrentCloud(CLOUDTYPE show_type);
 
