@@ -14,6 +14,7 @@
 #include <string.h>
 #include <sstream>
 #include <fstream>
+#include <algorithm>
 
 //pcl
 #include <pcl\io\io.h>
@@ -51,7 +52,8 @@ enum CLOUDTYPE
 	ORIGININORMAL,
 	PROJECTED,
 	TRANSFORMED,
-	NORMALS
+	NORMALS,
+	PINS
 };
 
 struct NormalEstStruct
@@ -164,11 +166,18 @@ private:
 	PointCloud<PointXYZ>::Ptr m_cloud_nonzeros;//Original Point cloud with non-zeros points.
 	PointCloud<PointXYZRGB>::Ptr m_cloudrgb;//Original Point Cloud with RGB
 	PointCloud<PointXYZI>::Ptr m_cloudi;//Original Point Cloud with Intensity(Depth)
+	PointCloud<PointXYZI>::Ptr m_pins;//Pins' positions and depths
 	PointCloud<PointXYZINormal>::Ptr m_cloudinorm;//Original Point cloud with Intensity(Depth) and point normal.
 	PointCloud<PointXYZ>::Ptr m_prjcld;//Point Cloud which is projected onto a plane.
 	PointCloud<PointXYZ>::Ptr m_transcld;//Transformed Point Cloud
 	PointCloud<Normal>::Ptr m_normal;//Normal Point Cloud
 	float m_mindist;
+
+	Matrix3f m_eigenVectors;
+	Vector3f m_eigenValues;
+	Vector4f m_pcaCentroid;
+	Matrix3f m_covariance;
+	//pcl::octree::OctreePointCloudSearch<pcl::PointXYZ> m_octree;
 
 public:
 	//PCL member functions
@@ -188,7 +197,7 @@ public:
 
 	CString GetTimeSpreadCString(string procstr, LARGE_INTEGER nfreq, LARGE_INTEGER nst, LARGE_INTEGER nend,double& tspread);
 	double GetValueFromCString(CEdit* inEdit);
-	PointCloud<PointXYZINormal>::Ptr GetNeighborsAlongPin(PointXYZINormal in_pt, Matrix3f eigenV);
+	vector<int> GetNeighborsAlongPin(PointXYZ in_pt, pcl::octree::OctreePointCloudSearch<pcl::PointXYZ> octree);
 
 	void ShowCurrentCloud(CLOUDTYPE show_type);
 

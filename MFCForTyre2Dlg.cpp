@@ -634,7 +634,7 @@ double CMFCForTyre2Dlg::GetValueFromCString(CEdit* inEdit)
 	return val;
 }
 
-PointCloud<PointXYZINormal>::Ptr CMFCForTyre2Dlg::GetNeighborsAlongPin(PointXYZINormal in_pt, Matrix3f eigenV)
+vector<int> CMFCForTyre2Dlg::GetNeighborsAlongPin(PointXYZ in_pt, pcl::octree::OctreePointCloudSearch<pcl::PointXYZ> octree)
 {
 	PointCloud<PointXYZ>::Ptr cloud;
 	if (1 == m_rad_pcaorigin.GetCheck())
@@ -646,62 +646,58 @@ PointCloud<PointXYZINormal>::Ptr CMFCForTyre2Dlg::GetNeighborsAlongPin(PointXYZI
 		cloud = this->GetCloudPtr(CLOUDTYPE::PROJECTED);
 	}
 
-	pcl::octree::OctreePointCloudSearch<pcl::PointXYZ> octree(1.0f);
-	octree.setInputCloud(cloud);
-	octree.addPointsFromInputCloud();
+	//pcl::octree::OctreePointCloudSearch<pcl::PointXYZ> octree(1.0f);
+	//octree.setInputCloud(cloud);
+	//octree.addPointsFromInputCloud();
 	//pt: Point, nbr:neighbors, IRS: Index of Radius Search, IKS: Index of K-neighbors Search, ISM: Index Search Method
-	vector<int> ptIRS;// , ptIKS, ptNbrID, nbrIKS, nbrIRS, nbrISM;
+	vector<int> ptIRS, ptIKS, ptNbrID, nbrIKS, nbrIRS, nbrISM;
 	//RSD: Radius Squared Distance, KSD: K-neighbors Squared Distance.
-	vector<float> ptRSD;// , ptKSD, nbrRSD, nbrKSD;
+	vector<float> ptRSD, ptKSD, nbrRSD, nbrKSD;
 	
 	double radius = GetValueFromCString(&m_edt_ne_radius);
-	//int kneighbors = int(GetValueFromCString(&m_edt_ne_kneighbors));
-	PointXYZ cur_pt;
-	cur_pt.x = in_pt.x;
-	cur_pt.y = in_pt.y;
-	cur_pt.z = in_pt.z;
-	PointXYZINormal cur_pt_in;
-	PointCloud<PointXYZINormal>::Ptr recusionPtr(::new PointCloud<PointXYZINormal>);
-	recusionPtr->points.push_back(in_pt);
+	int kneighbors = int(GetValueFromCString(&m_edt_ne_kneighbors));
+	PointXYZ cur_pt = in_pt;
 
-	PointCloud<PointXYZINormal>::Ptr tmpPtr;
+	PointXYZI cur_pt_in;
+	vector<int> recusionINT;
+	//recusionPtr->points.push_back(in_pt);
+
+	vector<int> tmpPtr;
 	int curID;
 	double angle;
 
 	int normId = int(GetValueFromCString(&m_edt_ci_normalindex));
-	Vector3d curV, mineigenVector(eigenV(normId, 0), eigenV(normId, 1), eigenV(normId, 2));
+	Vector3d curV, mineigenVector(m_eigenVectors(normId, 0), m_eigenVectors(normId, 1), m_eigenVectors(normId, 2));
 
 	//octree.nearestKSearch(cur_pt, kneighbors, ptIKS, ptKSD);
-	octree.radiusSearch(cur_pt, radius, ptIRS, ptRSD);
-	if (ptIRS.size() > 0)
+	octree.radiusSearch(in_pt, radius, ptIRS, ptRSD);
+	if (ptIRS.size() > 1)
 	{
-		for (size_t ii = 0; ii < ptIRS.size(); ++ii)
+		for (vector<int>::iterator ii = ptIRS.begin(); ii < ptIRS.end(); ++ii)
 		{
-			curID = ptIRS[ii];
-			cur_pt.x = m_cloud->points[curID].x;
-			cur_pt.y = m_cloud->points[curID].y;
-			cur_pt.z = m_cloud->points[curID].z;
+			curID = *ii;
+			cur_pt = m_cloud->points[curID];
 			curV = Vector3d(cur_pt.x, cur_pt.y, cur_pt.z) - Vector3d(in_pt.x, in_pt.y, in_pt.z);
-			angle = acos((curV.dot(mineigenVector)) / (curV.norm()*mineigenVector.norm())) / M_PI * 180;
-			if (angle < 45.0) 
+			if (curV.norm() < ACCURACY)
 			{
-				tmpPtr = GetNeighborsAlongPin(m_cloudinorm->points[curID],eigenV);
-				for (size_t jj = 0; jj < tmpPtr->points.size(); ++jj)
+				recusionINT.push_back(curID);
+				continue;
+			}
+
+			angle = acos((curV.dot(mineigenVector)) / (curV.norm()*mineigenVector.norm())) / M_PI * 180;
+			if (angle < 90.0) 
+			{
+				tmpPtr = GetNeighborsAlongPin(cur_pt,octree);
+				for (vector<int>::iterator tmpIt=tmpPtr.begin(); tmpIt < tmpPtr.end(); ++tmpIt)
 				{
-					cur_pt_in.x = tmpPtr->points[jj].x;
-					cur_pt_in.y = tmpPtr->points[jj].y;
-					cur_pt_in.z = tmpPtr->points[jj].z;
-					cur_pt_in.intensity = tmpPtr->points[jj].intensity;
-					cur_pt_in.normal_x = tmpPtr->points[jj].normal_x;
-					cur_pt_in.normal_y = tmpPtr->points[jj].normal_y;
-					cur_pt_in.normal_z = tmpPtr->points[jj].normal_z;
-					recusionPtr->points.push_back(cur_pt_in);
+					recusionINT.push_back(*tmpIt);
 				}
+				//break;
 			}
 		}
 	}
 
-	return recusionPtr;
+	return recusionINT;
 }
 
 void CMFCForTyre2Dlg::ShowCurrentCloud(CLOUDTYPE show_type)
@@ -964,10 +960,14 @@ void CMFCForTyre2Dlg::OnBnClickedRunpca()
 	compute3DCentroid(*cloud, pcaCentroid);
 	Matrix3f covariance;
 	computeCovarianceMatrixNormalized(*cloud, pcaCentroid, covariance);
+	m_pcaCentroid = pcaCentroid;
+	m_covariance = covariance;
 
 	SelfAdjointEigenSolver<Matrix3f> eigen_solver(covariance, ComputeEigenvectors);
 	Matrix3f eigenVecotorsPCA = eigen_solver.eigenvectors();
 	Vector3f eigenValuesPCA = eigen_solver.eigenvalues();
+	m_eigenValues = eigenValuesPCA;
+	m_eigenVectors = eigenVecotorsPCA;
 
 	//Searching pins' positions and length, using XYZI structure.
 	PointCloud<Normal>::Ptr cur_normals = GetNormalPtr();
@@ -1007,7 +1007,7 @@ void CMFCForTyre2Dlg::OnBnClickedRunpca()
 			tmprgb.g = 0;
 			tmprgb.b = 0;
 			cur_len = curvector.dot(mineigenVector);
-			if (cur_len < 0)
+			if (cur_len > 0)
 			{
 				tmpi.x = cloud->points[ii].x;
 				tmpi.y = cloud->points[ii].y;
@@ -1046,22 +1046,99 @@ void CMFCForTyre2Dlg::OnBnClickedRunpca()
 	//SaveCloudInPLY(cs_file, ORIGININORMAL);
 
 	//Re-searching candidate pins' positions and length
-	PointXYZINormal cur_pt;
-	PointCloud<PointXYZINormal>::Ptr mod_xyzinormal(::new PointCloud<PointXYZINormal>);
+	/*
+	PointXYZ cur_pt;
+	PointXYZI cur_pti;
+	PointCloud<PointXYZI>::Ptr mod_xyzi(::new PointCloud<PointXYZI>);
+	PointCloud<PointXYZI>::Ptr tmp_xyzi(::new PointCloud<PointXYZI>);
+	vector<int> xyziID,tmpID;
+	pcl::octree::OctreePointCloudSearch<pcl::PointXYZ> octree(1.0f);
+	//m_octree.setResolution(1.0f);
+	//m_octree = octree;
+	octree.setInputCloud(cloud);
+	octree.addPointsFromInputCloud();
 
-	for (size_t ii = 0; ii < cld_xyzin->points.size(); ++ii)
+	for (size_t ii = 0; ii < cld_xyzi->points.size(); ++ii)
 	{
-		cur_pt.x = cld_xyzin->points[ii].x;
-		cur_pt.y = cld_xyzin->points[ii].y;
-		cur_pt.z = cld_xyzin->points[ii].z;
-		cur_pt.intensity = cld_xyzin->points[ii].intensity;
-		cur_pt.normal_x = cld_xyzin->points[ii].normal_x;
-		cur_pt.normal_y = cld_xyzin->points[ii].normal_y;
-		cur_pt.normal_z = cld_xyzin->points[ii].normal_z;
-		mod_xyzinormal = GetNeighborsAlongPin(cur_pt, eigenVecotorsPCA);
+		cur_pt.x = cld_xyzi->points[ii].x;
+		cur_pt.y = cld_xyzi->points[ii].y;
+		cur_pt.z = cld_xyzi->points[ii].z;
+		tmpID = GetNeighborsAlongPin(cur_pt, octree);
+		vector<int>::iterator ExitPos;
+		for (vector<int>::iterator jj=tmpID.begin(); jj <tmpID.end(); ++jj)
+		{
+			ExitPos = find(tmpID.begin(), tmpID.end(), *jj);
+			if (ExitPos != tmpID.end())
+			{
+				continue;
+			}
+			else
+			{
+				cur_pti.x = cloud->points[*jj].x;
+				cur_pti.y = cloud->points[*jj].y;
+				cur_pti.z = cloud->points[*jj].z;
+				curpoint = Vector3d(cloud->points[*jj].x, cloud->points[*jj].y, cloud->points[*jj].z);
+				curvector = curpoint - pcaCent3d;
+				cur_pti.intensity = curvector.dot(mineigenVector);
+				mod_xyzi->points.push_back(cur_pti);
+				xyziID.push_back(*jj);
+			}
+
+		}
 	}
-	SetCloudINormalPtr(mod_xyzinormal);
-	SaveCloudInPLY(cs_file, ORIGININORMAL);
+	SetCloudIPtr(mod_xyzi);
+	SaveCloudInPLY(cs_file, ORIGINI);
+	*/
+	//Filting pins' postions and length.
+	vector<PointXYZI> pins;
+	PointXYZI tmpPt;
+	Vector3d cur_vec, cur_proj, base_vec, base_proj;
+	double angle;
+	bool is_newVector=false;
+	for (size_t ii = 0; ii < cld_xyzi->points.size(); ++ii)
+	{
+		tmpPt = cld_xyzi->points[ii];
+		if (ii == 0)
+		{
+			pins.push_back(tmpPt);
+		}
+		else
+		{
+			cur_vec = Vector3d(tmpPt.x, tmpPt.y, tmpPt.z);
+			cur_proj = cur_vec - tmpPt.intensity*mineigenVector;
+			is_newVector = true;
+			for (vector<PointXYZI>::iterator jj = pins.begin(); jj < pins.end(); ++jj)
+			{
+				base_vec = Vector3d(jj->x, jj->y, jj->z);
+				base_proj = base_vec - jj->intensity*mineigenVector;
+				angle = acos((cur_proj.dot(base_proj)) / (cur_proj.norm()*base_proj.norm())) / M_PI * 180;
+				if (angle < 1.0)
+				{
+					if (abs(tmpPt.intensity) > abs(jj->intensity))
+					{
+						*jj = tmpPt;
+					}
+					is_newVector = false;
+				}
+			}
+
+			if (is_newVector)
+			{
+				pins.push_back(tmpPt);
+			}
+		}
+	}
+
+	for (vector<PointXYZI>::iterator ii = pins.begin(); ii < pins.end(); ++ii)
+	{
+		if (!m_pins)
+		{
+			m_pins.reset(::new PointCloud<PointXYZI>);
+		}
+		m_pins->points.push_back(*ii);
+	}
+	
+	SaveCloudInPLY(cs_file, PINS);
 	//Show colored point cloud.
 	/*
 	boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer(::new pcl::visualization::PCLVisualizer("3D Viewer"));
@@ -1207,6 +1284,9 @@ int CMFCForTyre2Dlg::SaveCloudInPLY(CString in_path, CLOUDTYPE in_type, CLOUDTYP
 		break;
 	case ORIGININORMAL:
 		fe = pcl::io::savePLYFile(savepath + "_in." + ftype, *m_cloudinorm);
+		break;
+	case PINS:
+		fe = pcl::io::savePLYFile(savepath + "_pins." + ftype, *m_pins);
 		break;
 	}
 	return fe;
