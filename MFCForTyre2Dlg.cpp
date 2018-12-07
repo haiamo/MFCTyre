@@ -67,6 +67,7 @@ void CMFCForTyre2Dlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, RAD_PCAOrigin, m_rad_pcaorigin);
 	DDX_Control(pDX, RAD_PCAProjected, m_rad_pcaprojected);
 	DDX_Control(pDX, BTN_ConvertImg, m_btn_convertimg);
+	DDX_Control(pDX, BTN_PinsAnalysis, m_btn_segementpinsfilter);
 
 	DDX_Control(pDX, STC_OpenFile, m_stc_openfile);
 	DDX_Control(pDX, STC_LoadData, m_stc_loaddata);
@@ -87,9 +88,9 @@ void CMFCForTyre2Dlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, EDT_PA_SenPos_X, m_edt_pa_senpos_x);
 	DDX_Control(pDX, EDT_PA_SenPos_Y, m_edt_pa_senpos_y);
 	DDX_Control(pDX, EDT_PA_SenPos_Z, m_edt_pa_senpos_z);
-	DDX_Control(pDX, EDT_PA_AngRes, m_edt_pa_angres);
-	DDX_Control(pDX, EDT_PA_MaxAngWi, m_edt_pa_maxangwi);
-	DDX_Control(pDX, EDT_PA_MaxAngHi, m_edt_pa_maxanghi);
+	DDX_Control(pDX, EDT_SPF_ResampleRadius, m_edt_spf_resample_radius);
+	DDX_Control(pDX, EDT_SPF_ClusterTolerance, m_edt_spf_cluster_tolerance);
+	DDX_Control(pDX, EDT_SPF_DistanceThreshold, m_edt_spf_distance_threshold);
 }
 
 BEGIN_MESSAGE_MAP(CMFCForTyre2Dlg, CDialogEx)
@@ -151,9 +152,9 @@ BOOL CMFCForTyre2Dlg::OnInitDialog()
 	m_edt_pa_senpos_x.SetWindowTextA("0.0");
 	m_edt_pa_senpos_y.SetWindowTextA("0.0");
 	m_edt_pa_senpos_z.SetWindowTextA("0.0");
-	m_edt_pa_angres.SetWindowTextA("1.0");//Degree
-	m_edt_pa_maxangwi.SetWindowTextA("180.0");//Degree
-	m_edt_pa_maxanghi.SetWindowTextA("360.0");//Degree
+	m_edt_spf_resample_radius.SetWindowTextA("300.0");
+	m_edt_spf_cluster_tolerance.SetWindowTextA("200.0");
+	m_edt_spf_distance_threshold.SetWindowTextA("300.0");
 
 	m_rad_pcaorigin.SetCheck(1);
 	m_rad_pcaprojected.SetCheck(0);
@@ -332,6 +333,7 @@ BOOL CMFCForTyre2Dlg::EnableWindows(BOOL bEnable)
 	m_rad_pcaorigin.EnableWindow(bEnable);
 	m_rad_pcaprojected.EnableWindow(bEnable);
 	m_btn_convertimg.EnableWindow(bEnable);
+	m_btn_segementpinsfilter.EnableWindow(bEnable);
 
 	m_edt_ne_radius.EnableWindow(bEnable);
 	m_edt_ne_threadnum.EnableWindow(bEnable);
@@ -341,9 +343,9 @@ BOOL CMFCForTyre2Dlg::EnableWindows(BOOL bEnable)
 	m_edt_pa_senpos_x.EnableWindow(bEnable);
 	m_edt_pa_senpos_y.EnableWindow(bEnable);
 	m_edt_pa_senpos_z.EnableWindow(bEnable);
-	m_edt_pa_angres.EnableWindow(bEnable);
-	m_edt_pa_maxangwi.EnableWindow(bEnable);
-	m_edt_pa_maxanghi.EnableWindow(bEnable);
+	m_edt_spf_resample_radius.EnableWindow(bEnable);
+	m_edt_spf_cluster_tolerance.EnableWindow(bEnable);
+	m_edt_spf_distance_threshold.EnableWindow(bEnable);
 
 	return bEnable;
 }
@@ -516,20 +518,20 @@ void CMFCForTyre2Dlg::OnBnClickedNormalest()
 	SetNormalPtr(cloud_normals);
 
 
-	/*Compute principal curvatures.
-	
+	//Compute principal curvatures.
+	/*
 	pcl::PrincipalCurvaturesEstimation<pcl::PointXYZ, pcl::Normal, pcl::PrincipalCurvatures> prncrv;
 	PointCloud<PrincipalCurvatures>::Ptr cloud_curvatures(::new PointCloud<PrincipalCurvatures>);
 	prncrv.setInputCloud(cloud);
 	prncrv.setInputNormals(cloud_normals);
 	prncrv.setSearchMethod(tree);
 	//prncrv.setRadiusSearch(radius);
-	prncrv.setKSearch(int(floor(indfolder)));
+	prncrv.setKSearch(int(floor(knghbors)));
 	prncrv.compute(*cloud_curvatures);
-	*/ 
+	
 
 	//Find main normal for the next preojecting process.
-	/*
+	
 	Vector3d curNormal, cur_mainNorm;
 	vector<Vector3d> cand_normals;
 	vector<int> cand_normal_len;
@@ -826,7 +828,7 @@ void NormalEstObj::ComputeIntSectAngle()
 
 BOOL NormalEstObj::GetProjectNormal(Vector3d** normVec)
 {
-	*normVec = &neObj.back().ProjectNormal;
+	*normVec = &(neObj.back().ProjectNormal);
 	if (NULL !=normVec)
 	{
 		return TRUE;
@@ -1000,21 +1002,20 @@ void CMFCForTyre2Dlg::OnBnClickedRunpca()
 		}
 		cur_angle = acos((normalPtr.dot(mineigenVector)) / (normalPtr.norm()*mineigenVector.norm())) / M_PI * 180;
 		angles[ii]=cur_angle;
+		cur_len = curvector.dot(mineigenVector);
+		tmpi.x = cloud->points[ii].x;
+		tmpi.y = cloud->points[ii].y;
+		tmpi.z = cloud->points[ii].z;
+		tmpi.intensity = cur_len;
+		cld_xyzi->push_back(tmpi);
 		if (cur_angle > 90.0-angle_range && cur_angle < 90+angle_range)
 		{
 			ppoinID.push_back(ii);
 			tmprgb.r = 255;
 			tmprgb.g = 0;
 			tmprgb.b = 0;
-			cur_len = curvector.dot(mineigenVector);
 			if (cur_len > 0)
 			{
-				tmpi.x = cloud->points[ii].x;
-				tmpi.y = cloud->points[ii].y;
-				tmpi.z = cloud->points[ii].z;
-				tmpi.intensity = cur_len;
-				cld_xyzi->push_back(tmpi);
-
 				tmpin.x = tmpi.x;
 				tmpin.y = tmpi.y;
 				tmpin.z = tmpi.z;
@@ -1259,6 +1260,12 @@ int CMFCForTyre2Dlg::SaveCloudInPLY(CString in_path, CLOUDTYPE in_type, CLOUDTYP
 	case ORIGIN:
 		fe = pcl::io::savePLYFile(savepath + "_org." + ftype, *m_cloud);
 		break;
+	case ORIGINDOWNSAMPLE:
+		fe = pcl::io::savePLYFile(savepath + "_ods." + ftype, *m_cloud_downsample);
+		break;
+	case ORIGINSEGEMENT:
+		fe = pcl::io::savePLYFile(savepath + "_seg." + ftype, *m_cloud_segbase);
+		break;
 	case ORIGINNONZEROS:
 		fe = pcl::io::savePLYFile(savepath + "_nonzeros." + ftype, *m_cloud_nonzeros);
 		break;
@@ -1288,6 +1295,8 @@ int CMFCForTyre2Dlg::SaveCloudInPLY(CString in_path, CLOUDTYPE in_type, CLOUDTYP
 	case PINS:
 		fe = pcl::io::savePLYFile(savepath + "_pins." + ftype, *m_pins);
 		break;
+	case PINSCLUSTER:
+		fe = pcl::io::savePLYFile(savepath + "_pins_cluster." + ftype, *m_pins_cluster);
 	}
 	return fe;
 }
@@ -1418,7 +1427,7 @@ void CMFCForTyre2Dlg::OnBnClickedPinsanalysis()
 	Second step: Analyize the pins' propeties: 
 		1)hight from the tyre surface, 
 		2)the postion of pins(the position on pins' heads projecting points).
-	*/
+	
 
 	//First step: Getting the range-image from point cloud by PCL.
 	PointCloud<PointXYZ>::Ptr cloud = GetCloudPtr(ORIGIN);
@@ -1438,7 +1447,7 @@ void CMFCForTyre2Dlg::OnBnClickedPinsanalysis()
 	rangeImage.createFromPointCloud(point_cloud, angularResolution, maxAngleWidth, maxAngleHeight, sensorPose, coordinate_frame, noiseLevel, minRange, borderSize);
 
 	//创建3D视图并且添加点云进行显示
-	/*pcl::visualization::PCLVisualizer viewer("3D Viewer");
+	pcl::visualization::PCLVisualizer viewer("3D Viewer");
 	viewer.setBackgroundColor(1, 1, 1);
 	pcl::visualization::PointCloudColorHandlerCustom<pcl::PointWithRange> range_image_color_handler(rangeImagePtr, 0, 0, 0);
 	viewer.addPointCloud(rangeImagePtr, range_image_color_handler, "range image");
@@ -1447,7 +1456,7 @@ void CMFCForTyre2Dlg::OnBnClickedPinsanalysis()
 	//PointCloudColorHandlerCustom<PointType> point_cloud_color_handler (point_cloud_ptr, 150, 150, 150);
 	//viewer.addPointCloud (point_cloud_ptr, point_cloud_color_handler, "original point cloud");
 	viewer.initCameraParameters();
-	//setViewerPose(viewer, rangeImage.getTransformationToWorldSystem());*/
+	//setViewerPose(viewer, rangeImage.getTransformationToWorldSystem());
 
 	pcl::visualization::RangeImageVisualizer range_image_widget("Range image");
 	range_image_widget.showRangeImage(rangeImage);
@@ -1457,10 +1466,138 @@ void CMFCForTyre2Dlg::OnBnClickedPinsanalysis()
 		range_image_widget.spinOnce();
 	}
 
-	/*while (!viewer.wasStopped())
+	while (!viewer.wasStopped())
 	{
 		range_image_widget.spinOnce();
 		viewer.spinOnce();
 		pcl_sleep(0.01);
 	}*/
+
+	//Using Euclidean Cluster Extraction
+	//m_cloud has been loaded.
+
+	CString cs_file;
+	m_stc_openfile.GetWindowTextA(cs_file);
+
+	//Downsample the dataset, Needed?
+	float downsample_r = float(GetValueFromCString(&m_edt_spf_resample_radius));
+	pcl::VoxelGrid<pcl::PointXYZ> vg;
+	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_filtered(::new pcl::PointCloud<pcl::PointXYZ>);
+	vg.setInputCloud(m_cloud);
+	vg.setLeafSize(downsample_r, downsample_r, downsample_r);
+	vg.filter(*cloud_filtered);
+	m_cloud_downsample = cloud_filtered;
+	SaveCloudInPLY(cs_file, ORIGINDOWNSAMPLE);
+
+	// Estimate point normals
+	pcl::NormalEstimationOMP<PointXYZ, pcl::Normal> ne;
+	PointCloud<Normal>::Ptr cur_normal(::new PointCloud<Normal>);
+	pcl::search::KdTree<PointXYZ>::Ptr tree(::new pcl::search::KdTree<PointXYZ>());
+	ne.setNumberOfThreads(2);
+	ne.setSearchMethod(tree);
+	ne.setInputCloud(cloud_filtered);
+	ne.setKSearch(50);
+	if (!m_normal)
+	{
+		m_normal.reset(::new PointCloud<Normal>);
+	}
+	ne.compute(*cur_normal);
+	m_normal = cur_normal;
+
+
+	// Create the segmentation object for the planar model and set all the parameters
+	//pcl::SACSegmentation<pcl::PointXYZ> seg;
+	pcl::SACSegmentationFromNormals<PointXYZ, Normal>seg;
+	pcl::PointIndices::Ptr inliers(new pcl::PointIndices);
+	pcl::ModelCoefficients::Ptr coefficients(::new pcl::ModelCoefficients);
+	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_plane(::new pcl::PointCloud<pcl::PointXYZ>());
+	double distThreshold = GetValueFromCString(&m_edt_spf_distance_threshold);
+	seg.setOptimizeCoefficients(true);
+	seg.setModelType(pcl::SacModel::SACMODEL_CYLINDER);
+	seg.setMethodType(pcl::SAC_RANSAC);
+	seg.setMaxIterations(1000);
+	seg.setDistanceThreshold(distThreshold);
+	seg.setRadiusLimits(0, 100000);
+	seg.setInputNormals(cur_normal);
+	seg.setNormalDistanceWeight(0.5);
+	
+
+	PointCloud<PointXYZ>::Ptr cloud_f(::new PointCloud<PointXYZ>);
+	int i = 0, nr_points = (int)cloud_filtered->points.size();
+	PointXYZ tmpPt;
+	if (!m_cloud_segbase)
+	{
+		m_cloud_segbase.reset(::new PointCloud<PointXYZ>);
+	}
+	while (cloud_filtered->points.size() > 0.2 * nr_points)
+	{
+		// Segment the largest planar component from the remaining cloud
+		seg.setInputCloud(cloud_filtered);
+		ne.setSearchMethod(tree);
+		ne.setInputCloud(cloud_filtered);
+		ne.compute(*cur_normal);
+		seg.setInputNormals(cur_normal);
+		seg.segment(*inliers, *coefficients);
+		if (inliers->indices.size() == 0)
+		{
+			MessageBox("Could not estimate a planar model for the given dataset.", "Alert");
+			return;
+		}
+
+		// Extract the planar inliers from the input cloud
+		pcl::ExtractIndices<pcl::PointXYZ> extract;
+		extract.setInputCloud(cloud_filtered);
+		extract.setIndices(inliers);
+		extract.setNegative(false);
+
+		// Write the planar inliers to disk
+		extract.filter(*cloud_plane);
+		for (size_t ii = 0; ii < cloud_plane->points.size(); ++ii)
+		{
+			tmpPt = cloud_plane->points[ii];
+			m_cloud_segbase->points.push_back(tmpPt);
+		}
+		
+
+		// Remove the planar inliers, extract the rest
+		extract.setNegative(true);
+		extract.filter(*cloud_f);
+		cloud_filtered = cloud_f;
+		cur_normal.reset(::new PointCloud<Normal>);
+		tree.reset(::new pcl::search::KdTree<PointXYZ>);
+		cloud_plane.reset(::new PointCloud<PointXYZ>);
+	}
+	//m_cloud_segbase = cloud_plane;
+	SaveCloudInPLY(cs_file, ORIGINSEGEMENT);
+	// Creating the KdTree object for the search method of the extraction
+	//pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(::new pcl::search::KdTree<pcl::PointXYZ>);
+	tree->setInputCloud(cloud_filtered);
+
+	std::vector<pcl::PointIndices> cluster_indices;
+	pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;
+	float clusterTol = float(GetValueFromCString(&m_edt_spf_cluster_tolerance));
+	ec.setClusterTolerance(clusterTol); // 2cm
+	ec.setMinClusterSize(100);
+	ec.setMaxClusterSize(25000);
+	ec.setSearchMethod(tree);
+	ec.setInputCloud(cloud_filtered);
+	ec.extract(cluster_indices);
+
+	if (!cluster_indices.empty())
+	{
+		for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin(); it != cluster_indices.end(); ++it)
+		{
+			pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_cluster(::new pcl::PointCloud<pcl::PointXYZ>);
+			for (std::vector<int>::const_iterator pit = it->indices.begin(); pit != it->indices.end(); pit++)
+				cloud_cluster->points.push_back(cloud_filtered->points[*pit]); 
+			cloud_cluster->width = cloud_cluster->points.size();
+			cloud_cluster->height = 1;
+			cloud_cluster->is_dense = true;
+			m_pins_cluster = cloud_cluster;
+		}
+
+		//SetCloudPtr(cloud_cluster, PINSCLUSTER);
+		SaveCloudInPLY(cs_file, PINSCLUSTER);
+	}
+
 }

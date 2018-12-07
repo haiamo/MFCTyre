@@ -31,6 +31,12 @@
 #include <pcl\common\transforms.h>
 #include <pcl\range_image\range_image.h>
 #include <pcl\octree\octree.h>
+#include <pcl\filters\extract_indices.h>
+#include <pcl\filters\voxel_grid.h>
+#include <pcl\sample_consensus\method_types.h>
+#include <pcl\segmentation\sac_segmentation.h>
+#include <pcl\segmentation\extract_clusters.h>
+#include <pcl\ModelCoefficients.h>
 
 //opencv 
 #include <opencv2\core\core.hpp>
@@ -46,6 +52,8 @@ using namespace cv;
 enum CLOUDTYPE
 {
 	ORIGIN,
+	ORIGINDOWNSAMPLE,
+	ORIGINSEGEMENT,
 	ORIGINNONZEROS,
 	ORIGINRGB,
 	ORIGINI,
@@ -53,7 +61,8 @@ enum CLOUDTYPE
 	PROJECTED,
 	TRANSFORMED,
 	NORMALS,
-	PINS
+	PINS,
+	PINSCLUSTER
 };
 
 struct NormalEstStruct
@@ -123,6 +132,7 @@ protected:
 	CButton m_rad_pcaorigin;
 	CButton m_rad_pcaprojected;
 	CButton m_btn_convertimg;
+	CButton m_btn_segementpinsfilter;
 
 	//Static Text
 	CStatic m_stc_openfile;
@@ -146,9 +156,9 @@ protected:
 	CEdit m_edt_pa_senpos_x;
 	CEdit m_edt_pa_senpos_y;
 	CEdit m_edt_pa_senpos_z;
-	CEdit m_edt_pa_angres;
-	CEdit m_edt_pa_maxangwi;
-	CEdit m_edt_pa_maxanghi;
+	CEdit m_edt_spf_resample_radius;
+	CEdit m_edt_spf_cluster_tolerance;
+	CEdit m_edt_spf_distance_threshold;
 
 
 	// 生成的消息映射函数
@@ -163,7 +173,9 @@ public:
 // PCL parameters and methods.
 private:
 	PointCloud<PointXYZ>::Ptr m_cloud;//Original Point Cloud
+	PointCloud<PointXYZ>::Ptr m_cloud_downsample;//Downsample point cloud.
 	PointCloud<PointXYZ>::Ptr m_cloud_nonzeros;//Original Point cloud with non-zeros points.
+	PointCloud<PointXYZ>::Ptr m_cloud_segbase;//The base segement point cloud from origin one.
 	PointCloud<PointXYZRGB>::Ptr m_cloudrgb;//Original Point Cloud with RGB
 	PointCloud<PointXYZI>::Ptr m_cloudi;//Original Point Cloud with Intensity(Depth)
 	PointCloud<PointXYZI>::Ptr m_pins;//Pins' positions and depths
@@ -171,6 +183,7 @@ private:
 	PointCloud<PointXYZ>::Ptr m_prjcld;//Point Cloud which is projected onto a plane.
 	PointCloud<PointXYZ>::Ptr m_transcld;//Transformed Point Cloud
 	PointCloud<Normal>::Ptr m_normal;//Normal Point Cloud
+	PointCloud<PointXYZ>::Ptr m_pins_cluster;//Pins' cluster filted cloud point object.
 	float m_mindist;
 
 	Matrix3f m_eigenVectors;
