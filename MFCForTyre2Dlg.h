@@ -153,9 +153,7 @@ protected:
 	CEdit m_edt_ne_indexfolder;
 	CEdit m_edt_ne_kneighbors;
 	CEdit m_edt_ci_normalindex;
-	CEdit m_edt_pa_senpos_x;
-	CEdit m_edt_pa_senpos_y;
-	CEdit m_edt_pa_senpos_z;
+	CEdit m_edt_spf_normal_distance_weight;
 	CEdit m_edt_spf_resample_radius;
 	CEdit m_edt_spf_cluster_tolerance;
 	CEdit m_edt_spf_distance_threshold;

@@ -85,9 +85,7 @@ void CMFCForTyre2Dlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, EDT_NE_IndexFolder, m_edt_ne_indexfolder);
 	DDX_Control(pDX, EDT_NE_KNeighbors, m_edt_ne_kneighbors);
 	DDX_Control(pDX, EDT_CI_NormalIndex, m_edt_ci_normalindex);
-	DDX_Control(pDX, EDT_PA_SenPos_X, m_edt_pa_senpos_x);
-	DDX_Control(pDX, EDT_PA_SenPos_Y, m_edt_pa_senpos_y);
-	DDX_Control(pDX, EDT_PA_SenPos_Z, m_edt_pa_senpos_z);
+	DDX_Control(pDX, EDT_SPF_NormalDistanceWeight, m_edt_spf_normal_distance_weight);
 	DDX_Control(pDX, EDT_SPF_ResampleRadius, m_edt_spf_resample_radius);
 	DDX_Control(pDX, EDT_SPF_ClusterTolerance, m_edt_spf_cluster_tolerance);
 	DDX_Control(pDX, EDT_SPF_DistanceThreshold, m_edt_spf_distance_threshold);
@@ -149,9 +147,7 @@ BOOL CMFCForTyre2Dlg::OnInitDialog()
 	
 	m_edt_ci_normalindex.SetWindowTextA("0");
 
-	m_edt_pa_senpos_x.SetWindowTextA("0.0");
-	m_edt_pa_senpos_y.SetWindowTextA("0.0");
-	m_edt_pa_senpos_z.SetWindowTextA("0.0");
+	m_edt_spf_normal_distance_weight.SetWindowTextA("0.5");
 	m_edt_spf_resample_radius.SetWindowTextA("300.0");
 	m_edt_spf_cluster_tolerance.SetWindowTextA("200.0");
 	m_edt_spf_distance_threshold.SetWindowTextA("300.0");
@@ -272,6 +268,17 @@ void CMFCForTyre2Dlg::SetCloudPtr(PointCloud<PointXYZ>::Ptr in_cloud,CLOUDTYPE i
 				m_mindist = curdist;
 			}
 		}
+		m_cloud_downsample.reset();
+		m_cloud_nonzeros.reset();
+		m_cloud_segbase.reset();
+		m_cloudrgb.reset();
+		m_cloudi.reset();
+		m_pins.reset();
+		m_cloudinorm.reset();
+		m_prjcld.reset();
+		m_transcld.reset();
+		m_normal.reset();
+		m_pins_cluster.reset();
 		break;
 	case ORIGINNONZEROS:
 		m_cloud = in_cloud;
@@ -340,9 +347,7 @@ BOOL CMFCForTyre2Dlg::EnableWindows(BOOL bEnable)
 	m_edt_ne_indexfolder.EnableWindow(bEnable);
 	m_edt_ne_kneighbors.EnableWindow(bEnable);
 	m_edt_ci_normalindex.EnableWindow(bEnable);
-	m_edt_pa_senpos_x.EnableWindow(bEnable);
-	m_edt_pa_senpos_y.EnableWindow(bEnable);
-	m_edt_pa_senpos_z.EnableWindow(bEnable);
+	m_edt_spf_normal_distance_weight.EnableWindow(bEnable);
 	m_edt_spf_resample_radius.EnableWindow(bEnable);
 	m_edt_spf_cluster_tolerance.EnableWindow(bEnable);
 	m_edt_spf_distance_threshold.EnableWindow(bEnable);
@@ -1472,7 +1477,7 @@ void CMFCForTyre2Dlg::OnBnClickedPinsanalysis()
 		viewer.spinOnce();
 		pcl_sleep(0.01);
 	}*/
-
+	EnableWindows(FALSE);
 	//Using Euclidean Cluster Extraction
 	//m_cloud has been loaded.
 
@@ -1512,14 +1517,15 @@ void CMFCForTyre2Dlg::OnBnClickedPinsanalysis()
 	pcl::ModelCoefficients::Ptr coefficients(::new pcl::ModelCoefficients);
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_plane(::new pcl::PointCloud<pcl::PointXYZ>());
 	double distThreshold = GetValueFromCString(&m_edt_spf_distance_threshold);
+	double normDistWght = GetValueFromCString(&m_edt_spf_normal_distance_weight);
 	seg.setOptimizeCoefficients(true);
 	seg.setModelType(pcl::SacModel::SACMODEL_CYLINDER);
 	seg.setMethodType(pcl::SAC_RANSAC);
-	seg.setMaxIterations(1000);
+	seg.setMaxIterations(10000);
 	seg.setDistanceThreshold(distThreshold);
 	seg.setRadiusLimits(0, 100000);
 	seg.setInputNormals(cur_normal);
-	seg.setNormalDistanceWeight(0.5);
+	seg.setNormalDistanceWeight(normDistWght);
 	
 
 	PointCloud<PointXYZ>::Ptr cloud_f(::new PointCloud<PointXYZ>);
@@ -1529,18 +1535,24 @@ void CMFCForTyre2Dlg::OnBnClickedPinsanalysis()
 	{
 		m_cloud_segbase.reset(::new PointCloud<PointXYZ>);
 	}
+	BOOL bNormalRenewed = TRUE;
 	while (cloud_filtered->points.size() > 0.2 * nr_points)
 	{
 		// Segment the largest planar component from the remaining cloud
 		seg.setInputCloud(cloud_filtered);
-		ne.setSearchMethod(tree);
-		ne.setInputCloud(cloud_filtered);
-		ne.compute(*cur_normal);
+		if (!bNormalRenewed)
+		{
+			ne.setSearchMethod(tree);
+			ne.setInputCloud(cloud_filtered);
+			ne.compute(*cur_normal);
+			bNormalRenewed = FALSE;
+		}
 		seg.setInputNormals(cur_normal);
 		seg.segment(*inliers, *coefficients);
 		if (inliers->indices.size() == 0)
 		{
-			MessageBox("Could not estimate a planar model for the given dataset.", "Alert");
+			MessageBox("Could not estimate a cylinder model for the given dataset.", "Alert");
+			EnableWindows(TRUE);
 			return;
 		}
 
@@ -1599,5 +1611,5 @@ void CMFCForTyre2Dlg::OnBnClickedPinsanalysis()
 		//SetCloudPtr(cloud_cluster, PINSCLUSTER);
 		SaveCloudInPLY(cs_file, PINSCLUSTER);
 	}
-
+	EnableWindows(TRUE);
 }
