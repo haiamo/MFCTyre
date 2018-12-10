@@ -176,12 +176,13 @@ private:
 	PointCloud<PointXYZ>::Ptr m_cloud_segbase;//The base segement point cloud from origin one.
 	PointCloud<PointXYZRGB>::Ptr m_cloudrgb;//Original Point Cloud with RGB
 	PointCloud<PointXYZI>::Ptr m_cloudi;//Original Point Cloud with Intensity(Depth)
+	PointCloud<PointXYZI>::Ptr m_candPins;//Candidate pins by segemetation searching.
 	PointCloud<PointXYZI>::Ptr m_pins;//Pins' positions and depths
 	PointCloud<PointXYZINormal>::Ptr m_cloudinorm;//Original Point cloud with Intensity(Depth) and point normal.
 	PointCloud<PointXYZ>::Ptr m_prjcld;//Point Cloud which is projected onto a plane.
 	PointCloud<PointXYZ>::Ptr m_transcld;//Transformed Point Cloud
 	PointCloud<Normal>::Ptr m_normal;//Normal Point Cloud
-	PointCloud<PointXYZ>::Ptr m_pins_cluster;//Pins' cluster filted cloud point object.
+	PointCloud<PointXYZI>::Ptr m_pins_cluster;//Pins' cluster filted cloud point object.
 	float m_mindist;
 
 	Matrix3f m_eigenVectors;
@@ -204,7 +205,7 @@ public:
 	float GetCloudMinDist();
 
 	int SaveCloudInPLY(CString in_path, CLOUDTYPE in_type);
-	int SaveCloudInPLY(CString in_path, CLOUDTYPE in_type, CLOUDTYPE ori_type);	
+	int SaveCloudInPLY(CString in_path, CLOUDTYPE in_type, CLOUDTYPE ori_type, int seg_id, PointCloud<PointXYZ>::Ptr seg_pt);
 
 	CString GetTimeSpreadCString(string procstr, LARGE_INTEGER nfreq, LARGE_INTEGER nst, LARGE_INTEGER nend,double& tspread);
 	double GetValueFromCString(CEdit* inEdit);

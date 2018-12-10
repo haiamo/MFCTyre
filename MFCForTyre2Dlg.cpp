@@ -1243,10 +1243,10 @@ void CMFCForTyre2Dlg::OnBnClickedRunpca()
 
 int CMFCForTyre2Dlg::SaveCloudInPLY(CString in_path, CLOUDTYPE in_type)
 {
-	return SaveCloudInPLY(in_path, in_type, ORIGIN);
+	return SaveCloudInPLY(in_path, in_type, ORIGIN, -1, nullptr);
 }
 
-int CMFCForTyre2Dlg::SaveCloudInPLY(CString in_path, CLOUDTYPE in_type, CLOUDTYPE ori_type)
+int CMFCForTyre2Dlg::SaveCloudInPLY(CString in_path, CLOUDTYPE in_type, CLOUDTYPE ori_type, int seg_id, PointCloud<PointXYZ>::Ptr seg_pt)
 {
 	string path, fullname, fname, ftype, savepath;
 	size_t pathid = 0, ftypeid = 0;
@@ -1269,7 +1269,18 @@ int CMFCForTyre2Dlg::SaveCloudInPLY(CString in_path, CLOUDTYPE in_type, CLOUDTYP
 		fe = pcl::io::savePLYFile(savepath + "_ods." + ftype, *m_cloud_downsample);
 		break;
 	case ORIGINSEGEMENT:
-		fe = pcl::io::savePLYFile(savepath + "_seg." + ftype, *m_cloud_segbase);
+		if (seg_id<0)
+		{
+			fe = pcl::io::savePLYFile(savepath + "_seg." + ftype, *m_cloud_segbase);
+		}
+		else
+		{
+			if (!seg_pt)
+			{
+				return -1;
+			}
+			fe = pcl::io::savePLYFile(savepath + "_" + to_string(seg_id) + "_seg." + ftype, *seg_pt);
+		}
 		break;
 	case ORIGINNONZEROS:
 		fe = pcl::io::savePLYFile(savepath + "_nonzeros." + ftype, *m_cloud_nonzeros);
@@ -1477,7 +1488,25 @@ void CMFCForTyre2Dlg::OnBnClickedPinsanalysis()
 		viewer.spinOnce();
 		pcl_sleep(0.01);
 	}*/
+	m_cloud_segbase.reset(::new PointCloud<PointXYZ>);
+	m_pins_cluster.reset(::new PointCloud<PointXYZI>);
+
 	EnableWindows(FALSE);
+
+	PointCloud<PointXYZ>::Ptr cloud=m_cloud;
+	Vector4f pcaCentroid;
+	compute3DCentroid(*cloud, pcaCentroid);
+	Matrix3f covariance;
+	computeCovarianceMatrixNormalized(*cloud, pcaCentroid, covariance);
+	m_pcaCentroid = pcaCentroid;
+	m_covariance = covariance;
+
+	SelfAdjointEigenSolver<Matrix3f> eigen_solver(covariance, ComputeEigenvectors);
+	Matrix3f eigenVecotorsPCA = eigen_solver.eigenvectors();
+	Vector3f eigenValuesPCA = eigen_solver.eigenvalues();
+	Vector3d mineigenVector(eigenVecotorsPCA(0, 0), eigenVecotorsPCA(0, 1), eigenVecotorsPCA(0, 2));
+	m_eigenValues = eigenValuesPCA;
+	m_eigenVectors = eigenVecotorsPCA;
 	//Using Euclidean Cluster Extraction
 	//m_cloud has been loaded.
 
@@ -1486,11 +1515,19 @@ void CMFCForTyre2Dlg::OnBnClickedPinsanalysis()
 
 	//Downsample the dataset, Needed?
 	float downsample_r = float(GetValueFromCString(&m_edt_spf_resample_radius));
-	pcl::VoxelGrid<pcl::PointXYZ> vg;
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_filtered(::new pcl::PointCloud<pcl::PointXYZ>);
-	vg.setInputCloud(m_cloud);
-	vg.setLeafSize(downsample_r, downsample_r, downsample_r);
-	vg.filter(*cloud_filtered);
+	if (downsample_r > 0)
+	{
+		pcl::VoxelGrid<pcl::PointXYZ> vg;
+		vg.setInputCloud(m_cloud);
+		vg.setLeafSize(downsample_r, downsample_r, downsample_r);
+		vg.filter(*cloud_filtered);
+	}
+	else
+	{
+		cloud_filtered = m_cloud;
+	}
+
 	m_cloud_downsample = cloud_filtered;
 	SaveCloudInPLY(cs_file, ORIGINDOWNSAMPLE);
 
@@ -1514,18 +1551,21 @@ void CMFCForTyre2Dlg::OnBnClickedPinsanalysis()
 	//pcl::SACSegmentation<pcl::PointXYZ> seg;
 	pcl::SACSegmentationFromNormals<PointXYZ, Normal>seg;
 	pcl::PointIndices::Ptr inliers(new pcl::PointIndices);
+	pcl::IndicesConstPtr outliers;
+	pcl::IndicesConstPtr outliers2;
 	pcl::ModelCoefficients::Ptr coefficients(::new pcl::ModelCoefficients);
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_plane(::new pcl::PointCloud<pcl::PointXYZ>());
 	double distThreshold = GetValueFromCString(&m_edt_spf_distance_threshold);
 	double normDistWght = GetValueFromCString(&m_edt_spf_normal_distance_weight);
 	seg.setOptimizeCoefficients(true);
-	seg.setModelType(pcl::SacModel::SACMODEL_CYLINDER);
+	seg.setModelType(pcl::SacModel::SACMODEL_PLANE);
 	seg.setMethodType(pcl::SAC_RANSAC);
 	seg.setMaxIterations(10000);
 	seg.setDistanceThreshold(distThreshold);
 	seg.setRadiusLimits(0, 100000);
 	seg.setInputNormals(cur_normal);
 	seg.setNormalDistanceWeight(normDistWght);
+	
 	
 
 	PointCloud<PointXYZ>::Ptr cloud_f(::new PointCloud<PointXYZ>);
@@ -1536,7 +1576,8 @@ void CMFCForTyre2Dlg::OnBnClickedPinsanalysis()
 		m_cloud_segbase.reset(::new PointCloud<PointXYZ>);
 	}
 	BOOL bNormalRenewed = TRUE;
-	while (cloud_filtered->points.size() > 0.2 * nr_points)
+	int jj = 0;
+	do//while (cloud_filtered->points.size() > 0.1 * nr_points && jj<15)
 	{
 		// Segment the largest planar component from the remaining cloud
 		seg.setInputCloud(cloud_filtered);
@@ -1545,15 +1586,23 @@ void CMFCForTyre2Dlg::OnBnClickedPinsanalysis()
 			ne.setSearchMethod(tree);
 			ne.setInputCloud(cloud_filtered);
 			ne.compute(*cur_normal);
-			bNormalRenewed = FALSE;
 		}
 		seg.setInputNormals(cur_normal);
 		seg.segment(*inliers, *coefficients);
-		if (inliers->indices.size() == 0)
+		if (inliers->indices.size() <0.5*nr_points)
 		{
-			MessageBox("Could not estimate a cylinder model for the given dataset.", "Alert");
-			EnableWindows(TRUE);
-			return;
+			//MessageBox("Could not estimate a cylinder model for the given dataset.", "Alert");
+			//EnableWindows(TRUE);
+			if (seg.getModelType() == SACMODEL_PLANE)
+			{
+				seg.setModelType(SACMODEL_CYLINDER);
+				//continue;
+			}
+			else if (seg.getModelType() == SACMODEL_CYLINDER)
+			{
+				seg.setModelType(SACMODEL_CYLINDER);
+				//continue;
+			}
 		}
 
 		// Extract the planar inliers from the input cloud
@@ -1561,6 +1610,8 @@ void CMFCForTyre2Dlg::OnBnClickedPinsanalysis()
 		extract.setInputCloud(cloud_filtered);
 		extract.setIndices(inliers);
 		extract.setNegative(false);
+		outliers = extract.getIndices();
+		outliers2 = extract.getRemovedIndices();
 
 		// Write the planar inliers to disk
 		extract.filter(*cloud_plane);
@@ -1569,16 +1620,21 @@ void CMFCForTyre2Dlg::OnBnClickedPinsanalysis()
 			tmpPt = cloud_plane->points[ii];
 			m_cloud_segbase->points.push_back(tmpPt);
 		}
+		SaveCloudInPLY(cs_file, ORIGINSEGEMENT, ORIGIN, jj, cloud_plane);
+		jj++;
 		
 
 		// Remove the planar inliers, extract the rest
 		extract.setNegative(true);
 		extract.filter(*cloud_f);
 		cloud_filtered = cloud_f;
+		outliers = extract.getIndices();
+		outliers2 = extract.getRemovedIndices();
+		bNormalRenewed = FALSE;
 		cur_normal.reset(::new PointCloud<Normal>);
 		tree.reset(::new pcl::search::KdTree<PointXYZ>);
 		cloud_plane.reset(::new PointCloud<PointXYZ>);
-	}
+	} while (cloud_filtered->points.size() > 0.05 * nr_points && cloud_plane->points.size() < 0.1*nr_points&& jj < 15);
 	//m_cloud_segbase = cloud_plane;
 	SaveCloudInPLY(cs_file, ORIGINSEGEMENT);
 	// Creating the KdTree object for the search method of the extraction
@@ -1588,8 +1644,8 @@ void CMFCForTyre2Dlg::OnBnClickedPinsanalysis()
 	std::vector<pcl::PointIndices> cluster_indices;
 	pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;
 	float clusterTol = float(GetValueFromCString(&m_edt_spf_cluster_tolerance));
-	ec.setClusterTolerance(clusterTol); // 2cm
-	ec.setMinClusterSize(100);
+	ec.setClusterTolerance(clusterTol); 
+	ec.setMinClusterSize(10);
 	ec.setMaxClusterSize(25000);
 	ec.setSearchMethod(tree);
 	ec.setInputCloud(cloud_filtered);
@@ -1597,19 +1653,31 @@ void CMFCForTyre2Dlg::OnBnClickedPinsanalysis()
 
 	if (!cluster_indices.empty())
 	{
+		PointXYZI tmpPti;
+		Vector3d curpoint, curvector, pcaCent3d(pcaCentroid(0), pcaCentroid(1), pcaCentroid(2));
+		if (!m_pins_cluster)
+		{
+			m_pins_cluster.reset(::new PointCloud<PointXYZI>);
+		}
 		for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin(); it != cluster_indices.end(); ++it)
 		{
 			pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_cluster(::new pcl::PointCloud<pcl::PointXYZ>);
 			for (std::vector<int>::const_iterator pit = it->indices.begin(); pit != it->indices.end(); pit++)
-				cloud_cluster->points.push_back(cloud_filtered->points[*pit]); 
-			cloud_cluster->width = cloud_cluster->points.size();
-			cloud_cluster->height = 1;
-			cloud_cluster->is_dense = true;
-			m_pins_cluster = cloud_cluster;
+			{
+				tmpPt = cloud_filtered->points[*pit];
+				tmpPti.x = tmpPt.x;
+				tmpPti.y = tmpPt.y;
+				tmpPti.z = tmpPt.z;
+				curpoint = Vector3d(tmpPt.x, tmpPt.y, tmpPt.z);
+				curvector = curpoint - pcaCent3d;
+				tmpPti.intensity = curvector.dot(mineigenVector);
+				m_pins_cluster->points.push_back(tmpPti);
+			} 
 		}
 
 		//SetCloudPtr(cloud_cluster, PINSCLUSTER);
 		SaveCloudInPLY(cs_file, PINSCLUSTER);
 	}
+	
 	EnableWindows(TRUE);
 }
